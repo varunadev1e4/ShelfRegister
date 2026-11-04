@@ -189,35 +189,7 @@ function renderShelves() {
     </tbody></table></div></div>`;
 }
 /* ---------- Guide: how libraries organise, mapped to this app ---------- */
-function renderGuide() {
-  return `<div class="guide">
-  <div class="panel"><h2>How libraries find things</h2>
-    <p>Every library gives each item a <strong>call number</strong>, a short code that says what it is and where it sits on the shelf. The shelf is then sorted by that code, so any book can be found without a search. Three systems do almost all of this work:</p>
-    <div class="scroll"><table><thead><tr><th>System</th><th>Used by</th><th>Idea</th></tr></thead><tbody>
-      <tr><td><strong>Dewey Decimal</strong></td><td>School, public and small libraries</td><td>Ten classes of knowledge, numbered 000 to 900, refined with decimals. Easy to learn.</td></tr>
-      <tr><td><strong>Library of Congress</strong></td><td>University and research libraries</td><td>Letters for subjects (Q science, P literature, D history), then numbers. Better for very large, specialised collections.</td></tr>
-      <tr><td><strong>Cutter number</strong></td><td>Added to either system</td><td>A short code from the author's name, so books in one class sit in author order.</td></tr>
-    </tbody></table></div>
-    <p>Behind the shelves is the <strong>catalog record</strong>: title, author, subject, ISBN, location and status. Libraries store these as MARC records and let you search by any field. This app keeps the same fields, which is why search covers title, author, shelf and call number together.</p>
-  </div>
-  <div class="panel"><h2>The scheme this app uses</h2>
-    <p>Full Dewey is too fine for 2,000 books at home, so the app uses the ten main classes plus three shortcuts that home libraries need:</p>
-    <ul><li><strong>FIC</strong> fiction, <strong>BIO</strong> biography and memoir, <strong>KID</strong> children's books.</li>
-    <li>Non-fiction uses Dewey's ten classes: 000 general, 100 philosophy, 200 religion, 300 social sciences, 400 language, 500 science, 600 technology and health, 700 arts and hobbies, 800 literature, 900 history.</li></ul>
-    <p>The call number is built for you: <span class="mono">EN FIC ORW</span> is an English fiction book by an author starting “Orw”. Telugu books start with <span class="mono">TE</span>, so they stay together as their own section. Games get <span class="mono">BOARD</span> or <span class="mono">CARD</span> plus a category.</p>
-  </div>
-  <div class="panel"><h2>Shelf codes and the physical room</h2>
-    <ul><li>Letter each bookcase (A, B, C) and number its shelves from the top (A1, A2 ...). Write the code in the Shelf field. <span class="mono">B4</span> means case B, fourth shelf.</li>
-    <li>Shelve in call-number order inside each case. A book is then found by its call number, even before you search.</li>
-    <li>Keep Telugu together in one case or two. Keep board games in their own case, and card games in labelled bins with codes like <span class="mono">G1</span>.</li>
-    <li>Stick a small label with the call number on each spine, as libraries do. For 2,000 books, label as you shelve.</li></ul>
-  </div>
-  <div class="panel"><h2>Adding 2,000 items without typing them all</h2>
-    <ul><li>Scan barcodes with a free catalog app such as Libib or Goodreads, then export a CSV and import it on the Data tab.</li>
-    <li>Or type titles into a spreadsheet and import that. Columns it understands: title, author, language, category, shelf, isbn, notes.</li>
-    <li>Add the shelf code last, one bookcase at a time, as you put books on the shelf.</li></ul>
-  </div></div>`;
-}
+
 
 /* ---------- CSV ---------- */
 function parseCSV(text) {
@@ -344,7 +316,7 @@ function exportCSV() {
 }
 
 /* ---------- Render + events ---------- */
-const TABS = [["catalog","Catalog"],["night","Game night"],["lent","Lent out"],["shelves","Shelves"],["guide","How it works"],["data","Data"]];
+const TABS = [["catalog","Catalog"],["night","Game night"],["lent","Lent out"],["shelves","Shelves"],["data","Data"]];
 function render() {
   const view = document.getElementById("view"), tabs = document.getElementById("tabs");
   if (!S.session) { tabs.innerHTML = ""; view.innerHTML = renderLogin(); document.getElementById("loginform").onsubmit = signIn; setStatus(""); return; }
