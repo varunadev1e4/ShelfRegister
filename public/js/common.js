@@ -14,7 +14,9 @@ const LANGS = ["English","Telugu"];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const norm = s => String(s ?? "").toLowerCase();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); }));
-const today = () => new Date().toISOString().slice(0, 10);
+const pad2 = n => String(n).padStart(2, "0");
+const ymd = d => d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+const today = () => ymd(new Date());   // local date, so late-night entries land on the right day
 const daysSince = d => d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 864e5)) : 0;
 
 function setStatus(t) { const el = document.getElementById("status"); if (el) el.textContent = t; }
@@ -46,7 +48,9 @@ function fromRow(r) {
   return { id: r.id, kind: r.kind, title: r.title, creator: r.creator || "", lang: r.lang || "English", cat: r.cat || "",
     loc: r.loc || "", isbn: r.isbn || "", read: r.read_status || "unread", rating: r.rating || 0, notes: r.notes || "",
     gtype: r.gtype || "Board game", pmin: r.pmin, pmax: r.pmax, mins: r.mins, cx: r.cx || "Medium",
-    status: r.status || "shelf", lentTo: r.lent_to || "", lentOn: r.lent_on || "", hidden: !!r.hidden };
+    status: r.status || "shelf", lentTo: r.lent_to || "", lentOn: r.lent_on || "", hidden: !!r.hidden,
+    pages: r.pages || null, curPage: r.current_page || 0, startedOn: r.started_on || "", finishedOn: r.finished_on || "",
+    queued: !!r.queued, queuePos: r.queue_pos ?? null, createdAt: r.created_at || "" };
 }
 function toRow(i) {
   const book = i.kind === "book";
@@ -54,7 +58,10 @@ function toRow(i) {
     cat: i.cat || null, loc: i.loc || null, isbn: book ? (i.isbn || null) : null, read_status: book ? (i.read || "unread") : null,
     rating: book ? (i.rating || 0) : null, notes: i.notes || null, gtype: book ? null : (i.gtype || null),
     pmin: book ? null : (i.pmin ?? null), pmax: book ? null : (i.pmax ?? null), mins: book ? null : (i.mins ?? null), cx: book ? null : (i.cx || null),
-    status: i.status || "shelf", lent_to: i.lentTo || null, lent_on: i.lentOn || null, hidden: !!i.hidden };
+    status: i.status || "shelf", lent_to: i.lentTo || null, lent_on: i.lentOn || null, hidden: !!i.hidden,
+    pages: book ? (i.pages || null) : null, current_page: book ? (i.curPage || 0) : null,
+    started_on: book ? (i.startedOn || null) : null, finished_on: book ? (i.finishedOn || null) : null,
+    queued: book ? !!i.queued : false, queue_pos: book && i.queued ? (i.queuePos ?? null) : null };
 }
 /* Supabase returns at most 1000 rows per request, so read in pages. */
 async function fetchAll(table, orderCol) {

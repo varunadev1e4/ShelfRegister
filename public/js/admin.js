@@ -21,6 +21,7 @@ function cardHTML(i) {
   else { meta.push(`<span class="chip">${esc(i.gtype)}</span>`); if (i.pmin) meta.push(`<span class="chip">${i.pmin}${i.pmax && i.pmax !== i.pmin ? "–" + i.pmax : ""} players</span>`); if (i.mins) meta.push(`<span class="chip">${i.mins} min</span>`); }
   const c = catLabel(i); if (c) meta.push(`<span class="chip">${esc(c)}</span>`);
   if (i.hidden) meta.push(`<span class="chip sample">Hidden from friends</span>`);
+  if (i.kind === "book" && i.queued && i.read !== "read") meta.push(`<span class="chip">On reading list</span>`);
   return `<article class="card">
     <div class="call"><span>${esc(callNumber(i))}</span><span>${esc(i.loc || "no shelf")}</span></div>
     <h3>${esc(i.title)}</h3>
@@ -29,6 +30,7 @@ function cardHTML(i) {
     ${S.canWrite ? `<div class="acts">
       ${lent ? `<button class="btn small" data-act="return" data-id="${i.id}">Mark returned</button>` : `<button class="btn small" data-act="lend" data-id="${i.id}">Lend out</button>`}
       <button class="btn small" data-act="edit" data-id="${i.id}">Edit</button>
+      ${i.kind === "book" && i.read === "unread" && !i.queued ? `<button class="btn small" data-act="rl-add" data-id="${i.id}">+ Reading list</button>` : ""}
     </div>` : ""}
   </article>`;
 }
@@ -84,6 +86,9 @@ function openForm(id) {
         <label>ISBN (optional)<input type="text" id="i-isbn" value="${esc(v.isbn)}"></label>
         <label>Reading<select id="i-read">${sel([["unread","Not read yet"],["reading","Reading now"],["read","Finished"]], v.read || "unread")}</select></label>
         <label>Rating<select id="i-rating">${sel([["0","No rating"],["1","1"],["2","2"],["3","3"],["4","4"],["5","5"]], String(v.rating || 0))}</select></label>
+        <label>Pages<input type="number" id="i-pages" min="1" max="20000" value="${v.pages || ""}"></label>
+        <label>Started on<input type="date" id="i-started" value="${esc(v.startedOn || "")}"></label>
+        <label>Finished on<input type="date" id="i-finished" value="${esc(v.finishedOn || "")}"></label>
       </div>
     </div>
     <div id="fields-game" ${isBook ? "hidden" : ""}>
@@ -103,6 +108,12 @@ function openForm(id) {
       <button type="button" class="btn" data-act="close">Cancel</button>
       <button type="submit" class="btn primary">${it ? "Save changes" : "Add to catalog"}</button>
     </div></form></div>`;
+  const rd = document.getElementById("i-read");
+  rd.onchange = () => {
+    const st = document.getElementById("i-started"), fi = document.getElementById("i-finished");
+    if ((rd.value === "reading" || rd.value === "read") && !st.value) st.value = today();
+    if (rd.value === "read" && !fi.value) fi.value = today();
+  };
   const kindSel = document.getElementById("i-kind");
   kindSel.onchange = () => { const b = kindSel.value === "book"; document.getElementById("fields-book").hidden = !b; document.getElementById("fields-game").hidden = b; };
   document.getElementById("itemform").onsubmit = e => {
@@ -110,7 +121,7 @@ function openForm(id) {
     const g = x => document.getElementById(x).value;
     const k = it ? it.kind : g("i-kind");
     const base = { ...(it || {}), id: it ? it.id : uid(), kind: k, title: g("i-title").trim(), loc: g("i-loc").trim().toUpperCase(), notes: g("i-notes").trim(), status: it ? it.status : "shelf", hidden: document.getElementById("i-hidden").checked };
-    if (k === "book") Object.assign(base, { creator: g("i-creator").trim(), lang: g("i-lang"), cat: g("i-bcat"), isbn: g("i-isbn").trim(), read: g("i-read"), rating: +g("i-rating") });
+    if (k === "book") Object.assign(base, { creator: g("i-creator").trim(), lang: g("i-lang"), cat: g("i-bcat"), isbn: g("i-isbn").trim(), read: g("i-read"), rating: +g("i-rating"), pages: +g("i-pages") || null, startedOn: g("i-started"), finishedOn: g("i-finished"), queued: g("i-read") === "unread" && !!(it && it.queued) });
     else Object.assign(base, { gtype: g("i-gtype"), cat: g("i-gcat"), pmin: +g("i-pmin") || 1, pmax: Math.max(+g("i-pmax") || 1, +g("i-pmin") || 1), mins: +g("i-mins") || 30, cx: g("i-cx") });
     if (!base.title) return;
     saveItem(base); closeModal(); toast(it ? "Saved" : "Added to the catalog");
@@ -189,7 +200,35 @@ function renderShelves() {
     </tbody></table></div></div>`;
 }
 /* ---------- Guide: how libraries organise, mapped to this app ---------- */
-
+function renderGuide() {
+  return `<div class="guide">
+  <div class="panel"><h2>How libraries find things</h2>
+    <p>Every library gives each item a <strong>call number</strong>, a short code that says what it is and where it sits on the shelf. The shelf is then sorted by that code, so any book can be found without a search. Three systems do almost all of this work:</p>
+    <div class="scroll"><table><thead><tr><th>System</th><th>Used by</th><th>Idea</th></tr></thead><tbody>
+      <tr><td><strong>Dewey Decimal</strong></td><td>School, public and small libraries</td><td>Ten classes of knowledge, numbered 000 to 900, refined with decimals. Easy to learn.</td></tr>
+      <tr><td><strong>Library of Congress</strong></td><td>University and research libraries</td><td>Letters for subjects (Q science, P literature, D history), then numbers. Better for very large, specialised collections.</td></tr>
+      <tr><td><strong>Cutter number</strong></td><td>Added to either system</td><td>A short code from the author's name, so books in one class sit in author order.</td></tr>
+    </tbody></table></div>
+    <p>Behind the shelves is the <strong>catalog record</strong>: title, author, subject, ISBN, location and status. Libraries store these as MARC records and let you search by any field. This app keeps the same fields, which is why search covers title, author, shelf and call number together.</p>
+  </div>
+  <div class="panel"><h2>The scheme this app uses</h2>
+    <p>Full Dewey is too fine for 2,000 books at home, so the app uses the ten main classes plus three shortcuts that home libraries need:</p>
+    <ul><li><strong>FIC</strong> fiction, <strong>BIO</strong> biography and memoir, <strong>KID</strong> children's books.</li>
+    <li>Non-fiction uses Dewey's ten classes: 000 general, 100 philosophy, 200 religion, 300 social sciences, 400 language, 500 science, 600 technology and health, 700 arts and hobbies, 800 literature, 900 history.</li></ul>
+    <p>The call number is built for you: <span class="mono">EN FIC ORW</span> is an English fiction book by an author starting “Orw”. Telugu books start with <span class="mono">TE</span>, so they stay together as their own section. Games get <span class="mono">BOARD</span> or <span class="mono">CARD</span> plus a category.</p>
+  </div>
+  <div class="panel"><h2>Shelf codes and the physical room</h2>
+    <ul><li>Letter each bookcase (A, B, C) and number its shelves from the top (A1, A2 ...). Write the code in the Shelf field. <span class="mono">B4</span> means case B, fourth shelf.</li>
+    <li>Shelve in call-number order inside each case. A book is then found by its call number, even before you search.</li>
+    <li>Keep Telugu together in one case or two. Keep board games in their own case, and card games in labelled bins with codes like <span class="mono">G1</span>.</li>
+    <li>Stick a small label with the call number on each spine, as libraries do. For 2,000 books, label as you shelve.</li></ul>
+  </div>
+  <div class="panel"><h2>Adding 2,000 items without typing them all</h2>
+    <ul><li>Scan barcodes with a free catalog app such as Libib or Goodreads, then export a CSV and import it on the Data tab.</li>
+    <li>Or type titles into a spreadsheet and import that. Columns it understands: title, author, language, category, shelf, isbn, notes.</li>
+    <li>Add the shelf code last, one bookcase at a time, as you put books on the shelf.</li></ul>
+  </div></div>`;
+}
 
 /* ---------- CSV ---------- */
 function parseCSV(text) {
@@ -206,7 +245,7 @@ function parseCSV(text) {
   return rows.filter(r => r.some(x => x.trim()));
 }
 const csvCell = v => { const s = String(v ?? ""); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-const COLS = ["kind","title","creator","lang","cat","loc","isbn","read","rating","gtype","pmin","pmax","mins","cx","status","lentTo","lentOn","notes"];
+const COLS = ["kind","title","creator","lang","cat","loc","isbn","read","rating","gtype","pmin","pmax","mins","cx","status","lentTo","lentOn","notes","pages","startedOn","finishedOn","queued"];
 function toCSV() { return [COLS.join(","), ...allItems().map(i => COLS.map(c => csvCell(i[c])).join(","))].join("\n"); }
 function guessClass(raw) {
   const s = norm(raw).trim(); if (!s) return "FIC";
@@ -222,9 +261,10 @@ function importCSV(text) {
   const rows = parseCSV(text); if (rows.length < 2) return toast("That file has no rows to import.");
   const head = rows[0].map(h => norm(h).trim());
   const col = (...names) => head.findIndex(h => names.includes(h));
-  const ix = { title: col("title","name"), creator: col("author","creator","creators","authors"), lang: col("language","lang"), cat: col("cat","category","class","genre","subject","tags"),
+  const ix = { pages: col("pages","page count","number of pages"), started: col("started_on","startedon","started","date started"), finished: col("finished_on","finishedon","finished","date read","read date"), queued: col("queued"),
+    title: col("title","name"), creator: col("author","creator","creators","authors"), lang: col("language","lang"), cat: col("cat","category","class","genre","subject","tags"),
     loc: col("shelf","location","loc"), isbn: col("isbn","ean_isbn13","isbn13"), notes: col("notes","description"), kind: col("kind","type"), gtype: col("gtype"),
-    pmin: col("pmin","min players"), pmax: col("pmax","max players"), mins: col("mins","minutes"), read: col("read","reading") };
+    pmin: col("pmin","min players"), pmax: col("pmax","max players"), mins: col("mins","minutes"), read: col("read","reading","exclusive shelf") };
   if (ix.title < 0) return toast("No title column found. The first row must name its columns, for example title, author.");
   const get = (r, k) => ix[k] >= 0 ? (r[ix[k]] || "").trim() : "";
   const list = rows.slice(1).map(r => {
@@ -233,7 +273,7 @@ function importCSV(text) {
     const base = { id: uid(), kind, title, loc: get(r, "loc").toUpperCase(), notes: get(r, "notes"), status: "shelf" };
     if (kind === "game") return Object.assign(base, { gtype: /card/i.test(get(r, "kind") + get(r, "gtype")) ? "Card game" : "Board game", cat: GAME_CATS.find(c => norm(c) === norm(get(r, "cat"))) || "Party", pmin: +get(r, "pmin") || 2, pmax: +get(r, "pmax") || 4, mins: +get(r, "mins") || 45, cx: "Medium" });
     const lang = /tel/i.test(get(r, "lang")) || /[ఀ-౿]/.test(title) ? "Telugu" : "English";
-    return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: get(r, "isbn"), read: ["read","reading"].includes(norm(get(r, "read"))) ? norm(get(r, "read")) : "unread", rating: 0 });
+    return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: get(r, "isbn"), read: dateOnly(get(r, "finished")) ? "read" : readVal(get(r, "read")), rating: 0, pages: +get(r, "pages") || null, startedOn: dateOnly(get(r, "started")), finishedOn: dateOnly(get(r, "finished")), queued: norm(get(r, "read")) === "to-read" || norm(get(r, "queued")) === "true" });
   }).filter(Boolean);
   if (!list.length) return toast("No usable rows found.");
   addMany(list); toast("Imported " + list.length + " items");
@@ -252,6 +292,7 @@ const allItems = () => S.items;
 async function loadItems() {
   try {
     S.items = (await fetchAll("items", "created_at")).map(fromRow);
+    await loadReading();
     S.ready = true; render();
   } catch (e) { S.ready = true; render(); toast("Could not load the catalog: " + (e.message || "network error")); }
 }
@@ -316,7 +357,7 @@ function exportCSV() {
 }
 
 /* ---------- Render + events ---------- */
-const TABS = [["catalog","Catalog"],["night","Game night"],["lent","Lent out"],["shelves","Shelves"],["data","Data"]];
+const TABS = [["catalog","Catalog"],["reading","Reading"],["night","Game night"],["lent","Lent out"],["shelves","Shelves"],["guide","How it works"],["data","Data"]];
 function render() {
   const view = document.getElementById("view"), tabs = document.getElementById("tabs");
   if (!S.session) { tabs.innerHTML = ""; view.innerHTML = renderLogin(); document.getElementById("loginform").onsubmit = signIn; setStatus(""); return; }
@@ -325,7 +366,7 @@ function render() {
   const had = document.activeElement && document.activeElement.id;
   view.innerHTML = !S.ready ? `<div class="empty">Loading your catalog…</div>` :
     S.tab === "catalog" ? renderCatalog() : S.tab === "night" ? renderNight() : S.tab === "lent" ? renderLent() :
-    S.tab === "shelves" ? renderShelves() : S.tab === "guide" ? renderGuide() : renderData();
+    S.tab === "shelves" ? renderShelves() : S.tab === "guide" ? renderGuide() : S.tab === "reading" ? renderReading() : renderData();
   if (S.tab === "catalog" && S.ready) updateResults();
   if (had) { const el = document.getElementById(had); if (el && el.focus && view.contains(el)) { el.focus(); if (el.type === "search") { const n = el.value.length; el.setSelectionRange(n, n); } } }
   if (S.ready) setStatus(items.length + " items · signed in as " + (S.session.user.email || "owner"));
@@ -375,4 +416,3 @@ async function start() {
   const { data } = await sb.auth.getSession();
   if (!data.session) render();
 }
-start();
