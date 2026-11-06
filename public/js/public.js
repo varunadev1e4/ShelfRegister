@@ -1,6 +1,6 @@
 /* Friends page: browse only. Reads the public_items view, which never holds private fields. */
 const PREF = (() => { try { return JSON.parse(localStorage.getItem("shelf-prefs") || "{}"); } catch (e) { return {}; } })();
-const P = { items: [], tab: "browse", q: "", kind: "all", lang: "all", cat: "all", stat: "all", letter: "", loc: "",
+const P = { items: [], tab: "browse", q: "", kind: "all", lang: "all", cat: "all", stat: "all", letter: "", loc: "", only: "",
   sort: "title", view: PREF.view || "list", size: PREF.size || 25, page: 1,
   night: { players: 6, mins: 60, cx: "any", kind: "any" }, ready: false };
 function savePrefs() { try { localStorage.setItem("shelf-prefs", JSON.stringify({ view: P.view, size: P.size })); } catch (e) {} }
@@ -39,6 +39,7 @@ function matches(i, skip) {
   if (P.lang !== "all" && (i.kind !== "book" || i.lang !== P.lang)) return false;
   if (skip !== "cat" && P.cat !== "all" && i.cat !== P.cat) return false;
   if (P.loc && String(i.loc || "").toUpperCase() !== P.loc) return false;
+  if (P.only && i.id !== P.only) return false;
   if (P.stat === "shelf" && i.status === "lent") return false;
   if (skip !== "letter" && P.letter && (P.sort === "title" || P.sort === "title-desc" || P.sort === "author") && letterOf(sortKeyFor(i)) !== P.letter) return false;
   const toks = queryTokens(); if (!toks.length) return true;
@@ -135,6 +136,7 @@ function pupdate() {
   if (P.stat === "shelf") act.push(["stat", "Available now"]);
   if (P.cat !== "all") act.push(["cat", labelOf(P.cat)]);
   if (P.loc) act.push(["loc", "Shelf " + P.loc]);
+  if (P.only) act.push(["only", "One item (from a label)"]);
   if (P.letter) act.push(["letter", "Starts with " + (P.letter === "TE" ? "తె" : P.letter)]);
   if (P.q.trim()) act.push(["q", "“" + P.q.trim() + "”"]);
   document.getElementById("active").innerHTML = act.length ? act.map(([k, t]) => `<span class="chip">${esc(t)}<button data-clear="${k}" aria-label="Remove filter ${esc(t)}">×</button></span>`).join("") + `<button class="btn small" data-clear="all">Clear all</button>` : "";
@@ -190,8 +192,8 @@ document.addEventListener("click", e => {
   else if (d.view) { P.view = d.view; savePrefs(); document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === P.view))); pupdate(); }
   else if (d.page) { P.page = +d.page; pupdate(); toResultsTop(); }
   else if (d.clear) {
-    if (d.clear === "all") { P.q = ""; P.kind = "all"; P.lang = "all"; P.stat = "all"; P.cat = "all"; P.letter = ""; P.loc = ""; if (location.search) history.replaceState(null, "", location.pathname); }
-    else { P[d.clear] = ["q", "letter", "loc"].includes(d.clear) ? "" : "all"; if (d.clear === "loc" && location.search) history.replaceState(null, "", location.pathname); }
+    if (d.clear === "all") { P.q = ""; P.kind = "all"; P.lang = "all"; P.stat = "all"; P.cat = "all"; P.letter = ""; P.loc = ""; P.only = ""; if (location.search) history.replaceState(null, "", location.pathname); }
+    else { P[d.clear] = ["q", "letter", "loc", "only"].includes(d.clear) ? "" : "all"; if ((d.clear === "loc" || d.clear === "only") && location.search) history.replaceState(null, "", location.pathname); }
     resetPage(); prender();
   }
 });
@@ -252,6 +254,7 @@ async function pstart() {
   document.getElementById("title").textContent = CFG.LIBRARY_NAME || "Shelf Register";
   if (!sb) { document.getElementById("view").innerHTML = `<div class="empty"><h2>Not connected yet</h2><p>The owner still needs to add the Supabase details in config.js.</p></div>`; return; }
   const sp = new URLSearchParams(location.search).get("shelf"); if (sp) P.loc = sp.trim().toUpperCase();
+  const ip = new URLSearchParams(location.search).get("item"); if (ip) P.only = ip.trim();
   prender();
   try { P.items = (await fetchAll("public_items", "title")).map(fromRow); }
   catch (e) { document.getElementById("view").innerHTML = `<div class="empty"><h2>Could not load the shelves</h2><p>Check your connection and reload.</p></div>`; return; }

@@ -166,6 +166,12 @@ a.btn.ask{color:var(--accent);border-color:var(--accent)}
 .shelf-lab .qr svg{display:block;width:100%;height:auto}
 .lab-code{font:700 34px/1 "IBM Plex Mono",ui-monospace,monospace}
 .lab-sub{font:12px/1.3 "IBM Plex Sans",system-ui,sans-serif;margin-top:4px}
+.item-lab{display:flex;gap:8px;align-items:center;padding:8px;min-height:84px}
+.item-lab .qr{width:38%;min-width:56px;flex:none;background:#fff;padding:2px}
+.item-lab .qr svg{display:block;width:100%;height:auto}
+.il-title{font:600 13px/1.25 "IBM Plex Sans",system-ui,sans-serif;overflow-wrap:anywhere}
+.lab-text{min-width:0}
+.lab-grid+.lab-grid{margin-top:12px}
 .spine-lab{padding:6px 4px;text-align:center;min-height:84px;display:flex;flex-direction:column;justify-content:center;gap:1px;overflow:hidden}
 .sp-a{font:700 14px/1.1 "IBM Plex Mono",ui-monospace,monospace}
 .sp-b{font:600 13px/1.1 "IBM Plex Mono",ui-monospace,monospace;overflow-wrap:anywhere}
@@ -180,6 +186,7 @@ a.btn.ask{color:var(--accent);border-color:var(--accent)}
   .shelf-lab{min-height:46mm}
   .lab-code{font-size:30pt}
   .spine-lab{min-height:26mm}
+  .item-lab{min-height:28mm}.il-title{font-size:9pt}.lab-grid+.lab-grid{break-before:page}
   .sp-a{font-size:10pt}.sp-b{font-size:9pt}.sp-loc{font-size:7pt}
 }
 .facts{display:grid;gap:0;margin:0}

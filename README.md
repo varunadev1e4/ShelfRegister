@@ -135,6 +135,9 @@ This is protection against casual abuse, not a CAPTCHA. If you want requests to 
 ### Printing labels (Labels tab)
 
 - **Shelf labels:** one per shelf code, with a QR code and the code in large type. Stick one on each shelf. Scanning opens the friends page showing only that shelf.
+- **Book and game labels:** a QR code with the title, author and call number. Scanning opens that one item on the friends page. A hidden item shows nothing to friends.
+- **All at once:** in the Labels tab choose **Everything** and press **Print** once. You get every shelf label, then every book and game label, on separate pages. Choose "Books and games" under Items to include both.
+- **One by one:** press the **QR** button on any book or game in the catalog to see its label and print just that one. For one shelf, type its code in "Only shelves starting with".
 - **Spine labels:** the call number (for example EN / FIC / ORW) on separate lines, with the shelf code underneath.
 - Filter by shelf prefix (for example `A` for every shelf starting with A) to print one bookcase at a time, choose labels per row, then **Print**. Only the labels are printed. Cut along the dashed lines, or print on a sticker sheet.
 - If you use a custom domain, set `PUBLIC_URL` in `config.js` so the QR codes use it.

@@ -30,6 +30,7 @@ function cardHTML(i) {
     ${S.canWrite ? `<div class="acts">
       ${lent ? `<button class="btn small" data-act="return" data-id="${i.id}">Mark returned</button>` : `<button class="btn small" data-act="lend" data-id="${i.id}">Lend out</button>`}
       <button class="btn small" data-act="edit" data-id="${i.id}">Edit</button>
+      <button class="btn small" data-act="qr" data-id="${i.id}" aria-label="QR label for ${esc(i.title)}">QR</button>
       ${i.kind === "book" && i.read === "unread" && !i.queued ? `<button class="btn small" data-act="rl-add" data-id="${i.id}">+ Reading list</button>` : ""}
       ${i.kind === "book" ? `<button class="btn small" data-act="notes" data-id="${i.id}">Notes${i.quotes && i.quotes.length ? " (" + i.quotes.length + ")" : ""}</button>` : ""}
     </div>` : ""}

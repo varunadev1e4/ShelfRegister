@@ -11,5 +11,17 @@ window.CONFIG = {
   // How friends contact you. Use digits only for WhatsApp, with country code (India: 91...).
   // Leave a value empty ("") to hide that button.
   CONTACT_WHATSAPP: "",
-  CONTACT_EMAIL: ""
+  CONTACT_EMAIL: "varunisvarun@hotmail.com",
+
+  // How friends ask to borrow: "app" (a form that lands in your Requests tab),
+  // "whatsapp" (opens a chat with you), or "both".
+  REQUEST_MODE: "app",
+
+  // Optional. Your site address, if shelf QR labels should use a custom domain
+  // instead of the address you opened the owner app on. Example: "https://books.example.com"
+  PUBLIC_URL: "varunslibrary.vercel.app",
+
+  // Owner app: lending defaults.
+  LOAN_DAYS: 14,                 // default days until a book is due back
+  DEFAULT_COUNTRY_CODE: "91"     // added to 10-digit phone numbers for WhatsApp reminders
 };
