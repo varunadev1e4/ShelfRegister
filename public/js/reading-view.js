@@ -52,7 +52,7 @@ function nowPanel() {
     return `<div class="rbook"><div><strong>${esc(b.title)}</strong><div class="note">${esc(b.creator)}${b.startedOn ? " · started " + esc(b.startedOn) + ", day " + (daysBetween(b.startedOn, today()) + 1) : ""}</div></div>
       ${pct !== null ? `<div class="prog" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress in ${esc(b.title)}"><span style="width:${pct}%"></span></div><div class="note">Page ${b.curPage || 0} of ${b.pages} · ${pct}%</div>` : `<div class="note">Add the page count with Edit to see a progress bar.</div>`}
       <div class="inline"><label style="flex-direction:row;align-items:center;gap:6px;color:var(--fg)">Page <input type="number" id="pg-${b.id}" min="0" value="${b.curPage || 0}" aria-label="Current page"></label>
-      <button class="btn small" data-act="rd-progress" data-id="${b.id}">Save page</button><button class="btn small primary" data-act="rd-finish" data-id="${b.id}">Finished</button><button class="btn small" data-act="edit" data-id="${b.id}">Edit</button></div></div>`; }).join("");
+      <button class="btn small" data-act="rd-progress" data-id="${b.id}">Save page</button><button class="btn small primary" data-act="rd-finish" data-id="${b.id}">Finished</button><button class="btn small" data-act="notes" data-id="${b.id}">Notes</button><button class="btn small" data-act="edit" data-id="${b.id}">Edit</button></div></div>`; }).join("");
   return `<div class="panel"><h2>Reading now</h2>${rows || `<p class="note" style="margin:0">Nothing in progress. Start a book from your reading list.</p>`}</div>`;
 }
 function listPanel() {
@@ -82,8 +82,9 @@ function finishedPanel(y) {
 function renderReading() {
   if (!S.readingReady) return `<div class="panel"><h2>One more setup step</h2><p>The reading tracker needs the updated database. In Supabase open <strong>SQL Editor</strong>, paste the latest <span class="mono">supabase/schema.sql</span> from this project and run it. It is safe to run again. Then reload this page.</p></div>`;
   const y = S.readYear, cy = thisYear();
+  if (S.readView === "review") return renderReview(y);
   const years = [...new Set([cy, y, ...S.goals.map(g => g.year), ...books().filter(b => b.finishedOn).map(b => +b.finishedOn.slice(0, 4))])].sort((a, b) => b - a);
-  return `<div class="bar" style="align-items:center"><label style="flex-direction:row;align-items:center;gap:8px;color:var(--fg)">Year <select id="rd-year" style="width:auto">${years.map(n => `<option value="${n}"${n === y ? " selected" : ""}>${n}${n === cy ? " (this year)" : ""}</option>`).join("")}</select></label></div>
+  return `<div class="bar" style="align-items:center"><label style="flex-direction:row;align-items:center;gap:8px;color:var(--fg)">Year <select id="rd-year" style="width:auto">${years.map(n => `<option value="${n}"${n === y ? " selected" : ""}>${n}${n === cy ? " (this year)" : ""}</option>`).join("")}</select></label><button class="btn" data-act="rv-open">Year in review</button></div>
     <div class="two">${goalPanel(y)}${chartPanel(y)}</div>${statsRow(y)}
-    <div class="two">${nowPanel()}${listPanel()}</div>${finishedPanel(y)}`;
+    <div class="two">${nowPanel()}${listPanel()}</div>${pickPanel()}${quotesPanel()}${finishedPanel(y)}`;
 }

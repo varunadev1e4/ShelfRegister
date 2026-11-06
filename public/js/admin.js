@@ -31,6 +31,7 @@ function cardHTML(i) {
       ${lent ? `<button class="btn small" data-act="return" data-id="${i.id}">Mark returned</button>` : `<button class="btn small" data-act="lend" data-id="${i.id}">Lend out</button>`}
       <button class="btn small" data-act="edit" data-id="${i.id}">Edit</button>
       ${i.kind === "book" && i.read === "unread" && !i.queued ? `<button class="btn small" data-act="rl-add" data-id="${i.id}">+ Reading list</button>` : ""}
+      ${i.kind === "book" ? `<button class="btn small" data-act="notes" data-id="${i.id}">Notes${i.quotes && i.quotes.length ? " (" + i.quotes.length + ")" : ""}</button>` : ""}
     </div>` : ""}
   </article>`;
 }
@@ -73,6 +74,7 @@ function openForm(id) {
   const sel = (arr, cur) => arr.map(a => { const [val, txt] = Array.isArray(a) ? a : [a, a]; return `<option value="${esc(val)}"${cur === val ? " selected" : ""}>${esc(txt)}</option>`; }).join("");
   document.getElementById("modal").innerHTML = `<div class="scrim" data-act="close-bg"><form class="sheet" id="itemform" role="dialog" aria-modal="true" aria-label="${it ? "Edit item" : "Add item"}">
     <h2>${it ? "Edit item" : "Add item"}</h2>
+    <div id="dupwarn" hidden></div>
     <div class="grid2" style="margin-bottom:10px">
       <label>Type<select id="i-kind" ${it ? "disabled" : ""}><option value="book"${isBook ? " selected" : ""}>Book</option><option value="game"${!isBook ? " selected" : ""}>Game</option></select></label>
       <label>Shelf location<input type="text" id="i-loc" list="locs" placeholder="e.g. A3 = case A, shelf 3" value="${esc(v.loc)}"><datalist id="locs">${locs.map(l => `<option value="${esc(l)}">`).join("")}</datalist></label>
@@ -90,6 +92,15 @@ function openForm(id) {
         <label>Started on<input type="date" id="i-started" value="${esc(v.startedOn || "")}"></label>
         <label>Finished on<input type="date" id="i-finished" value="${esc(v.finishedOn || "")}"></label>
       </div>
+      <div class="grid2" style="margin-bottom:10px">
+        <label>Series<input type="text" id="i-series" list="series-list" value="${esc(v.series || "")}"><datalist id="series-list">${[...new Set(allItems().map(i => i.series).filter(Boolean))].sort().map(x => `<option value="${esc(x)}">`).join("")}</datalist></label>
+        <label>Number in series<input type="number" id="i-seriesno" step="0.5" min="0" value="${v.seriesNo ?? ""}"></label>
+        <label>Cover image link (optional)<input type="text" id="i-cover" value="${esc(v.coverUrl || "")}" placeholder="filled from the ISBN if blank"></label>
+      </div>
+      <div class="grid2" id="te-fields" style="margin-bottom:10px" ${v.lang === "Telugu" || hasTelugu(v.title) ? "" : "hidden"}>
+        <label>Title in English letters<input type="text" id="i-title-en" value="${esc(v.titleEn || "")}" placeholder="lets friends search without Telugu"></label>
+        <label>Author in English letters<input type="text" id="i-creator-en" value="${esc(v.creatorEn || "")}"></label>
+      </div>
     </div>
     <div id="fields-game" ${isBook ? "hidden" : ""}>
       <div class="grid2" style="margin-bottom:10px">
@@ -103,10 +114,12 @@ function openForm(id) {
     </div>
     <label>Notes (private, friends never see these)<textarea id="i-notes" rows="2">${esc(v.notes)}</textarea></label>
     <label style="flex-direction:row;align-items:center;gap:8px;margin-top:10px;color:var(--fg)"><input type="checkbox" id="i-hidden" style="width:auto"${v.hidden ? " checked" : ""}> Hide this item from the friends page</label>
+    <label style="flex-direction:row;align-items:center;gap:8px;margin-top:8px;color:var(--fg)"><input type="checkbox" id="i-pick" style="width:auto"${v.pick ? " checked" : ""}> Recommend this on the friends page (Picks)</label>
+    <label id="pick-note-row" style="margin-top:6px"${v.pick ? "" : " hidden"}>Why I recommend it (friends see this)<input type="text" id="i-picknote" maxlength="200" value="${esc(v.pickNote || "")}"></label>
     <div class="acts">
       ${it ? `<button type="button" class="btn danger" data-act="delete" data-id="${it.id}" style="margin-right:auto">Delete</button>` : ""}
       <button type="button" class="btn" data-act="close">Cancel</button>
-      <button type="submit" class="btn primary">${it ? "Save changes" : "Add to catalog"}</button>
+      <button type="submit" class="btn primary" id="add-btn">${it ? "Save changes" : "Add to catalog"}</button>
     </div></form></div>`;
   const rd = document.getElementById("i-read");
   rd.onchange = () => {
@@ -116,36 +129,51 @@ function openForm(id) {
   };
   const kindSel = document.getElementById("i-kind");
   kindSel.onchange = () => { const b = kindSel.value === "book"; document.getElementById("fields-book").hidden = !b; document.getElementById("fields-game").hidden = b; };
+  const g = x => document.getElementById(x).value;
+  const collect = () => {
+    const k = it ? it.kind : g("i-kind");
+    const base = { ...(it || {}), id: it ? it.id : uid(), kind: k, title: g("i-title").trim(), loc: g("i-loc").trim().toUpperCase(), notes: g("i-notes").trim(), status: it ? it.status : "shelf", hidden: document.getElementById("i-hidden").checked,
+      pick: document.getElementById("i-pick").checked, pickNote: g("i-picknote").trim() };
+    if (k === "book") {
+      Object.assign(base, { creator: g("i-creator").trim(), lang: g("i-lang"), cat: g("i-bcat"), isbn: g("i-isbn").trim(), read: g("i-read"), rating: +g("i-rating"), pages: +g("i-pages") || null, startedOn: g("i-started"), finishedOn: g("i-finished"), queued: g("i-read") === "unread" && !!(it && it.queued),
+        series: g("i-series").trim(), seriesNo: g("i-series").trim() && g("i-seriesno") !== "" ? +g("i-seriesno") : null, coverUrl: g("i-cover").trim() || isbnCover(g("i-isbn")) });
+      const tel = base.lang === "Telugu" || hasTelugu(base.title);
+      base.titleEn = tel ? (g("i-title-en").trim() || (hasTelugu(base.title) ? teluguToRoman(base.title) : "")) : "";
+      base.creatorEn = tel ? (g("i-creator-en").trim() || (hasTelugu(base.creator) ? teluguToRoman(base.creator) : "")) : "";
+    } else Object.assign(base, { gtype: g("i-gtype"), cat: g("i-gcat"), pmin: +g("i-pmin") || 1, pmax: Math.max(+g("i-pmax") || 1, +g("i-pmin") || 1), mins: +g("i-mins") || 30, cx: g("i-cx") });
+    return base;
+  };
+  /* English spelling fields: shown for Telugu, filled in automatically until you type your own */
+  const teT = document.getElementById("i-title-en"), teA = document.getElementById("i-creator-en");
+  if (teT.value) teT.dataset.touched = "1"; if (teA.value) teA.dataset.touched = "1";
+  teT.oninput = () => { teT.dataset.touched = "1"; }; teA.oninput = () => { teA.dataset.touched = "1"; };
+  const syncTe = () => {
+    const tel = g("i-lang") === "Telugu" || hasTelugu(g("i-title"));
+    document.getElementById("te-fields").hidden = !tel || document.getElementById("i-kind").value === "game";
+    if (hasTelugu(g("i-title")) && !teT.dataset.touched) teT.value = teluguToRoman(g("i-title"));
+    if (hasTelugu(g("i-creator")) && !teA.dataset.touched) teA.value = teluguToRoman(g("i-creator"));
+  };
+  document.getElementById("i-title").addEventListener("input", syncTe);
+  document.getElementById("i-creator").addEventListener("input", syncTe);
+  document.getElementById("i-lang").onchange = syncTe;
+  document.getElementById("i-pick").onchange = e => { document.getElementById("pick-note-row").hidden = !e.target.checked; };
+  /* duplicate warning */
+  let dupOk = false; const idx = dupIndex(allItems());
+  const showDupes = base => {
+    const d = it ? [] : idx.find(base), box = document.getElementById("dupwarn");
+    if (!d.length) { box.hidden = true; return false; }
+    box.hidden = false;
+    box.innerHTML = `<div class="warnbox"><strong>This looks like a duplicate.</strong> You already have:<ul>${d.slice(0, 3).map(o => `<li>${esc(o.title)}${o.creator ? " by " + esc(o.creator) : ""} · shelf ${esc(o.loc || "not set")}${o.status === "lent" ? " · lent out" : ""}</li>`).join("")}</ul>Check the shelf before adding another copy.</div>`;
+    return true;
+  };
+  document.getElementById("i-title").addEventListener("blur", () => { if (!it && g("i-title").trim() && showDupes(collect())) { dupOk = true; document.getElementById("add-btn").textContent = "Add anyway"; } });
   document.getElementById("itemform").onsubmit = e => {
     e.preventDefault();
-    const g = x => document.getElementById(x).value;
-    const k = it ? it.kind : g("i-kind");
-    const base = { ...(it || {}), id: it ? it.id : uid(), kind: k, title: g("i-title").trim(), loc: g("i-loc").trim().toUpperCase(), notes: g("i-notes").trim(), status: it ? it.status : "shelf", hidden: document.getElementById("i-hidden").checked };
-    if (k === "book") Object.assign(base, { creator: g("i-creator").trim(), lang: g("i-lang"), cat: g("i-bcat"), isbn: g("i-isbn").trim(), read: g("i-read"), rating: +g("i-rating"), pages: +g("i-pages") || null, startedOn: g("i-started"), finishedOn: g("i-finished"), queued: g("i-read") === "unread" && !!(it && it.queued) });
-    else Object.assign(base, { gtype: g("i-gtype"), cat: g("i-gcat"), pmin: +g("i-pmin") || 1, pmax: Math.max(+g("i-pmax") || 1, +g("i-pmin") || 1), mins: +g("i-mins") || 30, cx: g("i-cx") });
-    if (!base.title) return;
+    const base = collect(); if (!base.title) return;
+    if (!it && !dupOk && showDupes(base)) { dupOk = true; document.getElementById("add-btn").textContent = "Add anyway"; return; }
     saveItem(base); closeModal(); toast(it ? "Saved" : "Added to the catalog");
   };
   document.getElementById("i-title").focus();
-}
-function openLend(id) {
-  const it = allItems().find(i => i.id === id); if (!it) return;
-  const names = [...new Set(allItems().map(i => i.lentTo).filter(Boolean))];
-  document.getElementById("modal").innerHTML = `<div class="scrim" data-act="close-bg"><form class="sheet" id="lendform" role="dialog" aria-modal="true" aria-label="Lend item" style="width:min(420px,100%)">
-    <h2>Lend “${esc(it.title)}”</h2>
-    <div class="grid2"><label>Who is borrowing it<input type="text" id="l-who" list="friends" required><datalist id="friends">${names.map(n => `<option value="${esc(n)}">`).join("")}</datalist></label>
-    <label>Date<input type="date" id="l-date" value="${today()}"></label></div>
-    <div class="acts"><button type="button" class="btn" data-act="close">Cancel</button><button type="submit" class="btn primary">Lend out</button></div></form></div>`;
-  document.getElementById("lendform").onsubmit = e => {
-    e.preventDefault();
-    saveItem({ ...it, status: "lent", lentTo: document.getElementById("l-who").value.trim(), lentOn: document.getElementById("l-date").value || today() });
-    closeModal(); toast("Marked as lent");
-  };
-  document.getElementById("l-who").focus();
-}
-function returnItem(id) {
-  const it = allItems().find(i => i.id === id); if (!it) return;
-  const { lentTo, lentOn, ...rest } = it; saveItem({ ...rest, status: "shelf" }); toast("Marked as returned");
 }
 function closeModal() { document.getElementById("modal").innerHTML = ""; }
 /* ---------- Game night ---------- */
@@ -170,16 +198,6 @@ function renderNight() {
 }
 
 /* ---------- Lent out ---------- */
-function renderLent() {
-  const lent = allItems().filter(i => i.status === "lent").sort((a, b) => new Date(a.lentOn) - new Date(b.lentOn));
-  if (!lent.length) return `<div class="empty"><h2>Nothing is lent out</h2><p>When a friend borrows a book or game, use “Lend out” on its card. It will be listed here with the number of days.</p></div>`;
-  const by = {};
-  lent.forEach(i => (by[i.lentTo || "Unknown"] = by[i.lentTo || "Unknown"] || []).push(i));
-  return `<p class="count">${lent.length} item${lent.length > 1 ? "s" : ""} out with ${Object.keys(by).length} friend${Object.keys(by).length > 1 ? "s" : ""}</p>` +
-    Object.entries(by).map(([who, list]) => `<div class="panel"><h2>${esc(who)}</h2><div class="scroll"><table><thead><tr><th>Item</th><th>Call no.</th><th>Out since</th><th></th></tr></thead><tbody>
-      ${list.map(i => `<tr><td>${esc(i.title)}</td><td class="mono">${esc(callNumber(i))}</td><td>${esc(i.lentOn || "")} · ${daysSince(i.lentOn)} days</td><td>${S.canWrite ? `<button class="btn small" data-act="return" data-id="${i.id}">Returned</button>` : ""}</td></tr>`).join("")}
-      </tbody></table></div></div>`).join("");
-}
 
 /* ---------- Shelves ---------- */
 function renderShelves() {
@@ -245,7 +263,7 @@ function parseCSV(text) {
   return rows.filter(r => r.some(x => x.trim()));
 }
 const csvCell = v => { const s = String(v ?? ""); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-const COLS = ["kind","title","creator","lang","cat","loc","isbn","read","rating","gtype","pmin","pmax","mins","cx","status","lentTo","lentOn","notes","pages","startedOn","finishedOn","queued"];
+const COLS = ["kind","title","creator","lang","cat","loc","isbn","read","rating","gtype","pmin","pmax","mins","cx","status","lentTo","lentOn","dueOn","notes","pages","startedOn","finishedOn","queued","titleEn","creatorEn","series","seriesNo","coverUrl","pick","pickNote"];
 function toCSV() { return [COLS.join(","), ...allItems().map(i => COLS.map(c => csvCell(i[c])).join(","))].join("\n"); }
 function guessClass(raw) {
   const s = norm(raw).trim(); if (!s) return "FIC";
@@ -261,7 +279,7 @@ function importCSV(text) {
   const rows = parseCSV(text); if (rows.length < 2) return toast("That file has no rows to import.");
   const head = rows[0].map(h => norm(h).trim());
   const col = (...names) => head.findIndex(h => names.includes(h));
-  const ix = { pages: col("pages","page count","number of pages"), started: col("started_on","startedon","started","date started"), finished: col("finished_on","finishedon","finished","date read","read date"), queued: col("queued"),
+  const ix = { pages: col("pages","page count","number of pages"), started: col("started_on","startedon","started","date started"), finished: col("finished_on","finishedon","finished","date read","read date"), queued: col("queued"), series: col("series"), series_no: col("series_no","series number","number in series"), title_en: col("title_en","titleen","english title"),
     title: col("title","name"), creator: col("author","creator","creators","authors"), lang: col("language","lang"), cat: col("cat","category","class","genre","subject","tags"),
     loc: col("shelf","location","loc"), isbn: col("isbn","ean_isbn13","isbn13"), notes: col("notes","description"), kind: col("kind","type"), gtype: col("gtype"),
     pmin: col("pmin","min players"), pmax: col("pmax","max players"), mins: col("mins","minutes"), read: col("read","reading","exclusive shelf") };
@@ -272,16 +290,16 @@ function importCSV(text) {
     const kind = /game/i.test(get(r, "kind")) ? "game" : "book";
     const base = { id: uid(), kind, title, loc: get(r, "loc").toUpperCase(), notes: get(r, "notes"), status: "shelf" };
     if (kind === "game") return Object.assign(base, { gtype: /card/i.test(get(r, "kind") + get(r, "gtype")) ? "Card game" : "Board game", cat: GAME_CATS.find(c => norm(c) === norm(get(r, "cat"))) || "Party", pmin: +get(r, "pmin") || 2, pmax: +get(r, "pmax") || 4, mins: +get(r, "mins") || 45, cx: "Medium" });
-    const lang = /tel/i.test(get(r, "lang")) || /[ఀ-౿]/.test(title) ? "Telugu" : "English";
-    return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: get(r, "isbn"), read: dateOnly(get(r, "finished")) ? "read" : readVal(get(r, "read")), rating: 0, pages: +get(r, "pages") || null, startedOn: dateOnly(get(r, "started")), finishedOn: dateOnly(get(r, "finished")), queued: norm(get(r, "read")) === "to-read" || norm(get(r, "queued")) === "true" });
+    const lang = /tel/i.test(get(r, "lang")) || hasTelugu(title) ? "Telugu" : "English";
+    return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: cleanIsbn(get(r, "isbn")), coverUrl: isbnCover(get(r, "isbn")), titleEn: hasTelugu(title) ? (get(r, "title_en") || teluguToRoman(title)) : "", creatorEn: hasTelugu(get(r, "creator")) ? teluguToRoman(get(r, "creator")) : "", series: get(r, "series"), seriesNo: get(r, "series") && get(r, "series_no") !== "" ? +get(r, "series_no") : null, read: dateOnly(get(r, "finished")) ? "read" : readVal(get(r, "read")), rating: 0, pages: +get(r, "pages") || null, startedOn: dateOnly(get(r, "started")), finishedOn: dateOnly(get(r, "finished")), queued: norm(get(r, "read")) === "to-read" || norm(get(r, "queued")) === "true" });
   }).filter(Boolean);
   if (!list.length) return toast("No usable rows found.");
-  addMany(list); toast("Imported " + list.length + " items");
+  importWithDupCheck(list);
 }
 
 /* ---------- State ---------- */
 const S = {
-  items: [], tab: "catalog",
+  items: [], trash: [], requests: [], friends: [], loans: [], settings: {}, tab: "catalog",
   q: "", kind: "all", lang: "all", cat: "all", loc: "all", stat: "all",
   night: { players: 6, mins: 60, cx: "any", kind: "any" },
   ready: false, canWrite: true, session: null
@@ -291,8 +309,9 @@ const allItems = () => S.items;
 /* ---------- Saving to Supabase (screen updates first, then rolls back if the save fails) ---------- */
 async function loadItems() {
   try {
-    S.items = (await fetchAll("items", "created_at")).map(fromRow);
-    await loadReading();
+    const rows = (await fetchAll("items", "created_at")).map(fromRow);
+    S.items = rows.filter(r => !r.deletedAt); S.trash = rows.filter(r => r.deletedAt);
+    await loadReading(); await loadMore(); purgeOldTrash();
     S.ready = true; render();
   } catch (e) { S.ready = true; render(); toast("Could not load the catalog: " + (e.message || "network error")); }
 }
@@ -308,9 +327,12 @@ async function saveItem(item) {
   }
 }
 async function deleteItem(id) {
-  const prev = S.items; S.items = S.items.filter(i => i.id !== id); render();
-  const { error } = await sb.from("items").delete().eq("id", id);
-  if (error) { S.items = prev; render(); toast("Not deleted: " + error.message); }
+  const it = S.items.find(i => i.id === id); if (!it) return;
+  const stamp = new Date().toISOString();
+  S.items = S.items.filter(i => i.id !== id); S.trash.push({ ...it, deletedAt: stamp }); render();
+  const { error } = await sb.from("items").update({ deleted_at: stamp }).eq("id", id);
+  if (error) { S.trash = S.trash.filter(i => i.id !== id); S.items.push(it); render(); return toast("Not deleted: " + error.message); }
+  toast("Moved to trash", { label: "Undo", fn: () => restoreItem(id) });
 }
 async function addMany(list) {
   setStatus("Importing " + list.length + " items…");
@@ -337,37 +359,34 @@ async function signIn(e) {
 }
 
 /* ---------- Data tab ---------- */
-function renderData() {
-  const n = allItems().length;
-  return `<div class="panel"><h2>Import a spreadsheet</h2>
-    <p class="note" style="margin-top:0">Choose a CSV file with a header row. Columns understood: title, author, language, category, shelf, isbn, notes. Add a “kind” column with the word game to import games. Telugu titles are detected automatically. Importing the same file twice adds every row twice, so import each file once.</p>
-    <input type="file" id="csvfile" accept=".csv,text/csv" aria-label="CSV file to import">
-    <p class="note">Libib, Goodreads and most spreadsheet apps can export CSV.</p></div>
-  <div class="panel"><h2>Download a backup</h2>
-    <p class="note" style="margin-top:0">${n} item${n === 1 ? "" : "s"} are stored in your Supabase database. A CSV copy opens in Excel or Google Sheets.</p>
-    <button class="btn primary" data-act="export"${n ? "" : " disabled"}>Download CSV</button></div>
-  <div class="panel"><h2>Friends page</h2>
-    <p class="note" style="margin-top:0">Friends see title, author, language, category, shelf, and whether an item is on the shelf. They never see your notes, ISBNs, reading status or who borrowed what. Tick “Hide from the friends page” on any item you want kept private.</p>
-    <p class="mono" style="margin:0">${esc(location.origin)}/</p></div>`;
-}
-function exportCSV() {
-  const blob = new Blob(["﻿" + toCSV()], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "shelf-register-" + today() + ".csv";
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-}
+function exportCSV() { downloadText("shelf-register-" + today() + ".csv", toCSV(), "text/csv"); markBackup(); toast("CSV downloaded"); }
 
 /* ---------- Render + events ---------- */
-const TABS = [["catalog","Catalog"],["reading","Reading"],["night","Game night"],["lent","Lent out"],["shelves","Shelves"],["guide","How it works"],["data","Data"]];
+const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["night","Game night"],["lent","Lent out"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
+function tabBadge(k) {
+  let n = 0, cls = "n";
+  if (k === "catalog") n = S.items.length;
+  else if (k === "lent") n = S.items.filter(i => i.status === "lent").length;
+  else if (k === "requests") n = S.requests.filter(r => r.status === "new").length;
+  return n ? `<span class="${cls}">${n}</span>` : "";
+}
+function renderTab() {
+  switch (S.tab) {
+    case "catalog": return renderCatalog(); case "reading": return renderReading(); case "series": return renderSeries();
+    case "night": return renderNight(); case "lent": return renderLent(); case "friends": return renderFriends();
+    case "requests": return renderRequests(); case "shelves": return renderShelves(); case "labels": return renderLabels();
+    case "guide": return renderGuide(); default: return renderData();
+  }
+}
 function render() {
   const view = document.getElementById("view"), tabs = document.getElementById("tabs");
   if (!S.session) { tabs.innerHTML = ""; view.innerHTML = renderLogin(); document.getElementById("loginform").onsubmit = signIn; setStatus(""); return; }
   const items = allItems(), lentN = items.filter(i => i.status === "lent").length;
-  tabs.innerHTML = TABS.map(([k, t]) => `<button class="tab" role="tab" aria-selected="${S.tab === k}" data-act="tab" data-tab="${k}">${t}${k === "catalog" && items.length ? `<span class="n">${items.length}</span>` : ""}${k === "lent" && lentN ? `<span class="n">${lentN}</span>` : ""}</button>`).join("");
+  tabs.innerHTML = TABS.map(([k, t]) => `<button class="tab" role="tab" aria-selected="${S.tab === k}" data-act="tab" data-tab="${k}">${t}${tabBadge(k)}</button>`).join("");
   const had = document.activeElement && document.activeElement.id;
-  view.innerHTML = !S.ready ? `<div class="empty">Loading your catalog…</div>` :
-    S.tab === "catalog" ? renderCatalog() : S.tab === "night" ? renderNight() : S.tab === "lent" ? renderLent() :
-    S.tab === "shelves" ? renderShelves() : S.tab === "guide" ? renderGuide() : S.tab === "reading" ? renderReading() : renderData();
+  view.innerHTML = !S.ready ? `<div class="empty">Loading your catalog…</div>` : renderBanners() + renderTab();
   if (S.tab === "catalog" && S.ready) updateResults();
+  if (S.ready && typeof afterRender === "function") afterRender();
   if (had) { const el = document.getElementById(had); if (el && el.focus && view.contains(el)) { el.focus(); if (el.type === "search") { const n = el.value.length; el.setSelectionRange(n, n); } } }
   if (S.ready) setStatus(items.length + " items · signed in as " + (S.session.user.email || "owner"));
 }
@@ -381,7 +400,7 @@ document.addEventListener("click", e => {
   else if (act === "lend") openLend(id);
   else if (act === "return") returnItem(id);
   else if (act === "close") closeModal();
-  else if (act === "delete") { if (t.dataset.sure) { deleteItem(id); closeModal(); toast("Deleted"); } else { t.dataset.sure = "1"; t.textContent = "Tap again to delete"; } }
+  else if (act === "delete") { deleteItem(id); closeModal(); }
   else if (act === "viewshelf") { S.tab = "catalog"; S.loc = t.dataset.loc; render(); }
   else if (act === "export") exportCSV();
   else if (act === "signout") sb.auth.signOut();
