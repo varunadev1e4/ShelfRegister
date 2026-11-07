@@ -128,7 +128,7 @@ function pupdate() {
     : "No matches";
   const r = document.getElementById("results");
   r.innerHTML = !shown.length ? `<div class="empty">Nothing matches. Try fewer words, or clear the filters.</div>`
-    : P.view === "cards" ? `<div class="list">${shown.map(pcard).join("")}</div>` : `<div class="rows">${shown.map(prow).join("")}</div>`;
+    : P.view === "cards" ? `<div class="list">${shown.map(i => pcard(i)).join("")}</div>` : `<div class="rows">${shown.map(prow).join("")}</div>`;
   // active filters
   const act = [];
   if (P.kind !== "all") act.push(["kind", P.kind === "book" ? "Books" : "Games"]);
