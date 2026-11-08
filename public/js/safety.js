@@ -3,7 +3,7 @@
 
 async function loadMore() {
   S.needSchema = false;
-  await Promise.all([loadSettings(), typeof loadLending === "function" ? loadLending() : 0, typeof loadRequests === "function" ? loadRequests() : 0]);
+  await Promise.all([loadSettings(), typeof loadLending === "function" ? loadLending() : 0, typeof loadRequests === "function" ? loadRequests() : 0, typeof loadBorrowed === "function" ? loadBorrowed() : 0]);
 }
 async function loadSettings() {
   try { const { data, error } = await sb.from("settings").select("*").limit(1); if (error) throw error; S.settings = data && data[0] ? data[0] : {}; }
@@ -28,6 +28,8 @@ function renderBanners() {
     out.push(`<div class="banner"><span>${last ? "Your last backup was " + daysSince(last) + " days ago." : "You have not downloaded a backup yet."} Supabase's free plan does not keep backups for you.</span><button class="btn small" data-act="backup-json">Download backup now</button></div>`);
   const od = typeof overdueItems === "function" ? overdueItems().length : 0;
   if (od && S.tab !== "lent") out.push(`<div class="banner"><span>${od} lent item${od === 1 ? " is" : "s are"} overdue.</span><button class="btn small" data-act="tab" data-tab="lent">See who</button></div>`);
+  const lb = typeof lateBorrows === "function" ? lateBorrows().length : 0;
+  if (lb && S.tab !== "borrowed") out.push(`<div class="banner"><span>${lb} thing${lb === 1 ? "" : "s"} you borrowed ${lb === 1 ? "is" : "are"} past the return date.</span><button class="btn small" data-act="tab" data-tab="borrowed">See what</button></div>`);
   const nr = S.requests.filter(r => r.status === "new").length;
   if (nr && S.tab !== "requests") out.push(`<div class="banner"><span>${nr} new borrow request${nr === 1 ? "" : "s"} from friends.</span><button class="btn small" data-act="tab" data-tab="requests">Open requests</button></div>`);
   return out.join("");
@@ -75,7 +77,7 @@ function importWithDupCheck(list) {
 function backupObject() {
   return { app: "shelf-register", version: 2, exportedAt: new Date().toISOString(),
     items: [...S.items, ...S.trash].map(toRow),
-    friends: S.friends.map(({ owner_id, ...r }) => r), loans: S.loans.map(({ owner_id, ...r }) => r),
+    borrowed: (S.borrowed || []).map(({ owner_id, ...r }) => r), friends: S.friends.map(({ owner_id, ...r }) => r), loans: S.loans.map(({ owner_id, ...r }) => r),
     reading_goals: S.goals.map(g => ({ year: g.year, target: g.target })),
     reading_log: S.log.filter(l => l.id !== "tmp").map(l => ({ id: l.id, item_id: l.itemId, log_date: l.date, pages: l.pages })) };
 }
@@ -91,7 +93,7 @@ function restoreFromFile(file) {
     if (!b || b.app !== "shelf-register" || !Array.isArray(b.items)) return toast("That is not a Shelf Register backup.");
     S._restore = b;
     document.getElementById("modal").innerHTML = `<div class="scrim" data-act="close-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="Restore backup" style="width:min(460px,100%)">
-      <h2>Restore this backup?</h2><p>The file is from ${esc(String(b.exportedAt || "").slice(0, 10))} and holds ${b.items.length} items, ${(b.loans || []).length} loans, ${(b.friends || []).length} friends and ${(b.reading_goals || []).length} yearly goals.</p>
+      <h2>Restore this backup?</h2><p>The file is from ${esc(String(b.exportedAt || "").slice(0, 10))} and holds ${b.items.length} items, ${(b.loans || []).length} loans, ${(b.friends || []).length} friends, ${(b.borrowed || []).length} borrowed things and ${(b.reading_goals || []).length} yearly goals.</p>
       <p class="note">Restoring adds or overwrites those records. It never deletes anything you have now. Items in the file replace items with the same id.</p>
       <div class="acts"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="restore-go">Restore</button></div></div></div>`;
   };
@@ -104,6 +106,7 @@ async function restoreGo() {
     await up("items", b.items);
     await up("friends", b.friends || []);
     await up("loans", b.loans || []);
+    await up("borrowed", b.borrowed || []);
     await up("reading_goals", (b.reading_goals || []).map(g => ({ ...g, owner_id: S.session.user.id })), { onConflict: "owner_id,year" });
     await up("reading_log", b.reading_log || []);
     await loadItems(); toast("Backup restored");
@@ -111,9 +114,8 @@ async function restoreGo() {
 }
 
 /* ---------- One-click fixes ---------- */
-const needsCover = () => S.items.filter(i => i.kind === "book" && !i.coverUrl && cleanIsbn(i.isbn).length >= 10);
+const needsCover = () => (typeof coverCandidates === "function" ? coverCandidates() : []);
 const needsSpelling = () => S.items.filter(i => i.kind === "book" && hasTelugu(i.title) && !i.titleEn);
-function fillCovers() { const l = needsCover(); if (l.length) { saveMany(l.map(i => ({ ...i, coverUrl: isbnCover(i.isbn) }))); toast("Added cover links to " + l.length + " books"); } }
 function fillSpellings() { const l = needsSpelling(); if (l.length) { saveMany(l.map(i => ({ ...i, titleEn: teluguToRoman(i.title), creatorEn: i.creatorEn || (hasTelugu(i.creator) ? teluguToRoman(i.creator) : "") }))); toast("Added English spellings to " + l.length + " books. Check a few and edit any that look off."); } }
 
 /* ---------- Data tab ---------- */
@@ -125,13 +127,14 @@ function renderData() {
     <input type="file" id="csvfile" accept=".csv,text/csv" aria-label="CSV file to import">
     <p class="note">Libib, Goodreads and most spreadsheet apps can export CSV.</p></div>
   <div class="panel"><h2>Backup</h2>
-    <p class="note" style="margin-top:0">${n} item${n === 1 ? "" : "s"} in your Supabase database. ${last ? "Last backup: " + esc(last) + " (" + daysSince(last) + " days ago)." : "No backup downloaded yet."} The full backup holds items, loans, friends, goals and the reading diary. The CSV holds items only and opens in Excel.</p>
+    <p class="note" style="margin-top:0">${n} item${n === 1 ? "" : "s"} in your Supabase database. ${last ? "Last backup: " + esc(last) + " (" + daysSince(last) + " days ago)." : "No backup downloaded yet."} The full backup holds items, loans, things you borrowed, friends, goals and the reading diary. The CSV holds items only and opens in Excel.</p>
     <div class="acts" style="padding:0"><button class="btn primary" data-act="backup-json"${n ? "" : " disabled"}>Download full backup</button><button class="btn" data-act="export"${n ? "" : " disabled"}>Download items as CSV</button></div>
     <label style="margin-top:14px">Restore from a full backup<input type="file" id="restorefile" accept=".json,application/json" aria-label="Backup file to restore"></label></div>
   <div class="panel"><h2>Quick fixes</h2>
-    <div class="acts" style="padding:0"><button class="btn" data-act="fill-covers"${needsCover().length ? "" : " disabled"}>Add cover links (${needsCover().length} books with an ISBN)</button>
+    <div class="acts" style="padding:0"><button class="btn" data-act="fill-covers"${needsCover().length ? "" : " disabled"}>Find book covers (${needsCover().length} books to check)</button>
     <button class="btn" data-act="fill-spellings"${needsSpelling().length ? "" : " disabled"}>Add English spellings (${needsSpelling().length} Telugu books)</button></div>
-    <p class="note" style="margin-bottom:0">Covers come from Open Library by ISBN. A book with no cover there simply shows none.</p></div>
+    <p id="cov-status" class="note" role="status" style="margin:8px 0 0">${S.cov && S.cov.running ? "Working…" : ""}</p><div class="acts" style="padding:4px 0 0"><button class="btn small" id="cov-stop" data-act="cov-stop" hidden>Stop</button></div>
+    <p class="note" style="margin-bottom:0">Covers are looked up on Open Library and Google Books, by ISBN first and then by title and author, and a link is saved only if the picture really loads. Books with no cover online show none. Keep this tab open while it runs. You can run it again later; books already checked are skipped for 30 days.</p></div>
   <div class="panel"><h2>Trash</h2>${trash.length ? `<div class="scroll"><table><thead><tr><th>Item</th><th>Deleted</th><th></th></tr></thead><tbody>
     ${trash.map(i => `<tr><td>${esc(i.title)}<div class="note">${esc(i.creator || "")}</div></td><td class="mono">${esc(i.deletedAt.slice(0, 10))}</td><td style="white-space:nowrap"><button class="btn small" data-act="restore-item" data-id="${i.id}">Restore</button> <button class="btn small danger" data-act="purge-item" data-id="${i.id}">Delete forever</button></td></tr>`).join("")}</tbody></table></div>
     <div class="acts" style="padding:8px 0 0"><button class="btn small danger" data-act="empty-trash">Empty trash</button></div>` : `<p class="note" style="margin:0">Nothing in the trash. Deleted items wait here for 30 days, so a slip is never final.</p>`}</div>
@@ -148,7 +151,6 @@ document.addEventListener("click", e => {
   else if (a === "purge-item") purgeItems([id]);
   else if (a === "empty-trash") purgeItems(S.trash.map(i => i.id));
   else if (a === "restore-go") restoreGo();
-  else if (a === "fill-covers") fillCovers();
   else if (a === "fill-spellings") fillSpellings();
   else if (a === "imp-all" && S._imp) { const l = S._imp.list; S._imp = null; closeModal(); addMany(l); }
   else if (a === "imp-skip" && S._imp) { const l = S._imp.fresh; S._imp = null; closeModal(); addMany(l); }

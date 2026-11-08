@@ -96,7 +96,7 @@ function openForm(id) {
       <div class="grid2" style="margin-bottom:10px">
         <label>Series<input type="text" id="i-series" list="series-list" value="${esc(v.series || "")}"><datalist id="series-list">${[...new Set(allItems().map(i => i.series).filter(Boolean))].sort().map(x => `<option value="${esc(x)}">`).join("")}</datalist></label>
         <label>Number in series<input type="number" id="i-seriesno" step="0.5" min="0" value="${v.seriesNo ?? ""}"></label>
-        <label>Cover image link (optional)<input type="text" id="i-cover" value="${esc(v.coverUrl || "")}" placeholder="filled from the ISBN if blank"></label>
+        <label>Cover image link (optional)<span style="display:flex;gap:6px"><input type="text" id="i-cover" value="${esc(v.coverUrl || "")}" placeholder="found automatically if blank" style="min-width:0;flex:1"><button type="button" class="btn small" data-act="cov-one">Find cover</button></span></label>
       </div>
       <div class="grid2" id="te-fields" style="margin-bottom:10px" ${v.lang === "Telugu" || hasTelugu(v.title) ? "" : "hidden"}>
         <label>Title in English letters<input type="text" id="i-title-en" value="${esc(v.titleEn || "")}" placeholder="lets friends search without Telugu"></label>
@@ -137,7 +137,7 @@ function openForm(id) {
       pick: document.getElementById("i-pick").checked, pickNote: g("i-picknote").trim() };
     if (k === "book") {
       Object.assign(base, { creator: g("i-creator").trim(), lang: g("i-lang"), cat: g("i-bcat"), isbn: g("i-isbn").trim(), read: g("i-read"), rating: +g("i-rating"), pages: +g("i-pages") || null, startedOn: g("i-started"), finishedOn: g("i-finished"), queued: g("i-read") === "unread" && !!(it && it.queued),
-        series: g("i-series").trim(), seriesNo: g("i-series").trim() && g("i-seriesno") !== "" ? +g("i-seriesno") : null, coverUrl: g("i-cover").trim() || isbnCover(g("i-isbn")) });
+        series: g("i-series").trim(), seriesNo: g("i-series").trim() && g("i-seriesno") !== "" ? +g("i-seriesno") : null, coverUrl: g("i-cover").trim() });
       const tel = base.lang === "Telugu" || hasTelugu(base.title);
       base.titleEn = tel ? (g("i-title-en").trim() || (hasTelugu(base.title) ? teluguToRoman(base.title) : "")) : "";
       base.creatorEn = tel ? (g("i-creator-en").trim() || (hasTelugu(base.creator) ? teluguToRoman(base.creator) : "")) : "";
@@ -173,6 +173,7 @@ function openForm(id) {
     const base = collect(); if (!base.title) return;
     if (!it && !dupOk && showDupes(base)) { dupOk = true; document.getElementById("add-btn").textContent = "Add anyway"; return; }
     saveItem(base); closeModal(); toast(it ? "Saved" : "Added to the catalog");
+    if (base.kind === "book" && !base.coverUrl && typeof autoCovers === "function") setTimeout(() => autoCovers([base.id]), 800);
   };
   document.getElementById("i-title").focus();
 }
@@ -292,7 +293,7 @@ function importCSV(text) {
     const base = { id: uid(), kind, title, loc: get(r, "loc").toUpperCase(), notes: get(r, "notes"), status: "shelf" };
     if (kind === "game") return Object.assign(base, { gtype: /card/i.test(get(r, "kind") + get(r, "gtype")) ? "Card game" : "Board game", cat: GAME_CATS.find(c => norm(c) === norm(get(r, "cat"))) || "Party", pmin: +get(r, "pmin") || 2, pmax: +get(r, "pmax") || 4, mins: +get(r, "mins") || 45, cx: "Medium" });
     const lang = /tel/i.test(get(r, "lang")) || hasTelugu(title) ? "Telugu" : "English";
-    return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: cleanIsbn(get(r, "isbn")), coverUrl: isbnCover(get(r, "isbn")), titleEn: hasTelugu(title) ? (get(r, "title_en") || teluguToRoman(title)) : "", creatorEn: hasTelugu(get(r, "creator")) ? teluguToRoman(get(r, "creator")) : "", series: get(r, "series"), seriesNo: get(r, "series") && get(r, "series_no") !== "" ? +get(r, "series_no") : null, read: dateOnly(get(r, "finished")) ? "read" : readVal(get(r, "read")), rating: 0, pages: +get(r, "pages") || null, startedOn: dateOnly(get(r, "started")), finishedOn: dateOnly(get(r, "finished")), queued: norm(get(r, "read")) === "to-read" || norm(get(r, "queued")) === "true" });
+    return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: cleanIsbn(get(r, "isbn")), coverUrl: "", titleEn: hasTelugu(title) ? (get(r, "title_en") || teluguToRoman(title)) : "", creatorEn: hasTelugu(get(r, "creator")) ? teluguToRoman(get(r, "creator")) : "", series: get(r, "series"), seriesNo: get(r, "series") && get(r, "series_no") !== "" ? +get(r, "series_no") : null, read: dateOnly(get(r, "finished")) ? "read" : readVal(get(r, "read")), rating: 0, pages: +get(r, "pages") || null, startedOn: dateOnly(get(r, "started")), finishedOn: dateOnly(get(r, "finished")), queued: norm(get(r, "read")) === "to-read" || norm(get(r, "queued")) === "true" });
   }).filter(Boolean);
   if (!list.length) return toast("No usable rows found.");
   importWithDupCheck(list);
@@ -342,6 +343,7 @@ async function addMany(list) {
     if (error) { toast("Import stopped after " + i + " items: " + error.message); await loadItems(); return; }
   }
   await loadItems(); toast("Imported " + list.length + " items");
+  if (typeof autoCovers === "function") autoCovers(list.filter(i => i.kind === "book").map(i => i.id));
 }
 
 /* ---------- Sign in ---------- */
@@ -363,18 +365,19 @@ async function signIn(e) {
 function exportCSV() { downloadText("shelf-register-" + today() + ".csv", toCSV(), "text/csv"); markBackup(); toast("CSV downloaded"); }
 
 /* ---------- Render + events ---------- */
-const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["night","Game night"],["lent","Lent out"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
+const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["night","Game night"],["lent","Lent out"],["borrowed","Borrowed"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
 function tabBadge(k) {
   let n = 0, cls = "n";
   if (k === "catalog") n = S.items.length;
   else if (k === "lent") n = S.items.filter(i => i.status === "lent").length;
+  else if (k === "borrowed") n = S.borrowed.filter(b => !b.returned_on).length;
   else if (k === "requests") n = S.requests.filter(r => r.status === "new").length;
   return n ? `<span class="${cls}">${n}</span>` : "";
 }
 function renderTab() {
   switch (S.tab) {
     case "catalog": return renderCatalog(); case "reading": return renderReading(); case "series": return renderSeries();
-    case "night": return renderNight(); case "lent": return renderLent(); case "friends": return renderFriends();
+    case "night": return renderNight(); case "lent": return renderLent(); case "borrowed": return renderBorrowed(); case "friends": return renderFriends();
     case "requests": return renderRequests(); case "shelves": return renderShelves(); case "labels": return renderLabels();
     case "guide": return renderGuide(); default: return renderData();
   }

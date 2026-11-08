@@ -194,3 +194,22 @@ begin
 end $$;
 drop trigger if exists borrow_request_guard on public.borrow_requests;
 create trigger borrow_request_guard before insert on public.borrow_requests for each row execute function public.check_borrow_request();
+
+-- 6. Books and games you borrow FROM other people (private to you) -------------
+create table if not exists public.borrowed (
+  id          uuid primary key default gen_random_uuid(),
+  owner_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title       text not null,
+  author      text,
+  from_name   text not null,
+  from_phone  text,
+  borrowed_on date not null default current_date,
+  due_on      date,
+  returned_on date,
+  notes       text,
+  created_at  timestamptz not null default now()
+);
+create index if not exists borrowed_owner_idx on public.borrowed (owner_id, borrowed_on);
+alter table public.borrowed enable row level security;
+drop policy if exists "owner full access" on public.borrowed;
+create policy "owner full access" on public.borrowed for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());

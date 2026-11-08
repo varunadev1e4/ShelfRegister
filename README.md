@@ -142,6 +142,14 @@ This is protection against casual abuse, not a CAPTCHA. If you want requests to 
 - Filter by shelf prefix (for example `A` for every shelf starting with A) to print one bookcase at a time, choose labels per row, then **Print**. Only the labels are printed. Cut along the dashed lines, or print on a sticker sheet.
 - If you use a custom domain, set `PUBLIC_URL` in `config.js` so the QR codes use it.
 
+### Things you borrow from others (Borrowed tab)
+
+Tap **I borrowed something**, then enter the title, who lent it, and a return date (30 days by default). The tab lists what you owe by person, flags overdue items, and shows a banner. **Returned** moves it to a history list (with Undo), **+7 days** pushes the date, and **Message** opens WhatsApp with a short note to the lender. Add their phone number once, or add them under Friends, so the message opens their chat. This is private to you. It needs the new part of `schema.sql` (section 6).
+
+### Book covers
+
+Data tab → **Find book covers** checks each book on Open Library and Google Books (by ISBN, then by title and author) and saves a link only if the picture really loads. It replaces old covers that no longer work, and skips books it already tried in the last 30 days. Keep the tab open while it runs. New books and imports look for a cover automatically. In the add/edit form, **Find cover** does it for one book. Many Telugu and local books have no cover online, and those show none.
+
 ### More for reading
 
 - **Notes and quotes:** the **Notes** button on any book keeps private notes and favourite quotes with page numbers. The Reading tab shows a random quote to revisit.
