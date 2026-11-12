@@ -12,19 +12,22 @@ function bar(p, label) { return `<div class="prog" role="img" aria-label="${esc(
 function tasteProfile() {
   const done = books().filter(b => b.read === "read");
   const w = b => b.rating > 0 ? (b.rating - 2) / 3 : 0.5;          // 5 stars = 1, 3 stars = 0.33, 1 star = negative, unrated = 0.5
-  const cat = {}, auth = {}, lang = {}, bestBy = {};
+  const cat = {}, auth = {}, lang = {}, bestBy = {}, tag = {}, tagName = {};
   const recentCut = ymd(new Date(new Date().setFullYear(new Date().getFullYear() - 1)));
   const recent = done.filter(b => b.finishedOn && b.finishedOn >= recentCut), langSrc = recent.length >= 3 ? recent : done;
   done.forEach(b => {
     cat[b.cat || ""] = (cat[b.cat || ""] || 0) + w(b);
+    (b.tags || []).forEach(x => { const k = x.toLowerCase(); tag[k] = (tag[k] || 0) + w(b); tagName[k] = x; });
     const k = aKey(b.creator); if (k) { auth[k] = (auth[k] || 0) + w(b); if (w(b) >= 0.66 && (!bestBy[k] || b.rating > bestBy[k].rating)) bestBy[k] = b; }
   });
   langSrc.forEach(b => { lang[b.lang] = (lang[b.lang] || 0) + 1; });
   const top = Math.max(0.01, ...Object.values(cat));
   const catNorm = Object.fromEntries(Object.entries(cat).map(([k, v]) => [k, Math.max(0, v) / top]));
   const langShare = Object.fromEntries(Object.entries(lang).map(([k, v]) => [k, v / langSrc.length]));
+  const topTag = Math.max(0.01, ...Object.values(tag)), tagNorm = Object.fromEntries(Object.entries(tag).map(([k, v]) => [k, Math.max(0, v) / topTag]));
+  const favTags = Object.entries(tag).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k]) => tagName[k]);
   const pagesDone = done.filter(b => b.pages).map(b => b.pages);
-  return { done, enough: done.length >= 3, catNorm, auth, bestBy, langShare, medPages: median(pagesDone), nPages: pagesDone.length,
+  return { done, enough: done.length >= 3, catNorm, tagNorm, favTags, auth, bestBy, langShare, medPages: median(pagesDone), nPages: pagesDone.length,
     favCats: Object.entries(cat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k),
     favAuthors: Object.entries(auth).filter(([k, v]) => v >= 0.66 && bestBy[k]).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => bestBy[k].creator) };
 }
@@ -40,6 +43,8 @@ function scoreBooks(t) {
     if (b.queued) { s += 3; why.push("On your reading list"); }
     const ak = aKey(b.creator);
     if (t.bestBy[ak] && t.auth[ak] >= 0.66) { s += 4; why.push(`You liked ${t.bestBy[ak].title}`); }
+    const tg = (b.tags || []).map(x => ({ x, n: t.tagNorm[x.toLowerCase()] || 0 })).sort((p, q) => q.n - p.n)[0];
+    if (t.enough && tg && tg.n > 0.3) { s += 3 * tg.n; if (tg.n > 0.5) why.push(`You enjoy ${tg.x}`); }
     const cn = t.catNorm[b.cat || ""];
     if (t.enough && cn > 0.3) { s += 3 * cn; if (cn > 0.6) why.push(`You enjoy ${catName(b.cat)}`); }
     const ls = t.langShare[b.lang]; if (ls) { s += 1.5 * ls; if (ls > 0.7 && t.enough) why.push(`You mostly read ${b.lang}`); }
@@ -88,6 +93,7 @@ function tastePanel(t) {
   return `<div class="panel"><h2>Your reading taste</h2><ul style="margin:0;padding-left:20px;display:grid;gap:4px">
     <li>You have finished <strong>${t.done.length}</strong> books.</li>
     ${t.favCats.length ? `<li>Favourite shelves: <strong>${t.favCats.map(c => esc(catName(c))).join(", ")}</strong>. Ratings count, so books you rated highly pull harder.</li>` : ""}
+    ${t.favTags.length ? `<li>Genres you rate highest: <strong>${t.favTags.map(esc).join(", ")}</strong>.</li>` : ""}
     ${t.favAuthors.length ? `<li>Authors you rate highly: <strong>${t.favAuthors.map(esc).join(", ")}</strong>.</li>` : ""}
     <li>Recently you read ${esc(lang)}.</li>
     ${t.medPages ? `<li>Typical length: about <strong>${Math.round(t.medPages)}</strong> pages.</li>` : ""}</ul></div>`;

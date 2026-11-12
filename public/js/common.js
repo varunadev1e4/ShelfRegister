@@ -7,6 +7,17 @@ const BOOK_CLASSES = [
   ["600","Technology, health"],["700","Arts, hobbies"],["800","Literature, poetry, essays"],
   ["900","History, geography"]
 ];
+/* Genres and tags: starter suggestions only. You can type any tag of your own. */
+const BOOK_TAGS = ["Mythology","Political","History","Biography","Memoir","Mystery","Thriller","Crime","Sci-fi","Fantasy","Romance","Historical fiction","Horror","Adventure","Humour","Satire","Classics","Short stories","Poetry","Drama","Graphic novel","Epics & folklore","War","Social issues","Culture & society","Essays","Self-help","Business","Finance & investing","Economics","Management & leadership","Psychology","Philosophy","Spirituality","Religion","Science","Mathematics","Technology","Nature & environment","Health & fitness","Cooking","Travel","Art & design","Music & film","Sports","Education","Parenting","Law","Language & grammar","Reference","Children's stories"];
+const GAME_TAGS = ["Party","Strategy","Family","Co-op","Bluffing","Deduction","Social deduction","Trivia","Word","Drawing","Dice","Card drafting","Abstract","Team","Two-player","Storytelling","Racing","Classic","Quick filler","Kids"];
+function cleanTags(list) {
+  const seen = new Set(), out = [];
+  (Array.isArray(list) ? list : String(list || "").split(/[;,]/)).forEach(t => {
+    const s = String(t || "").replace(/\s+/g, " ").trim().slice(0, 40), k = s.toLowerCase();
+    if (s && !seen.has(k) && out.length < 12) { seen.add(k); out.push(s); }
+  });
+  return out;
+}
 const GAME_TYPES = ["Board game","Card game"];
 const GAME_CATS = ["Party","Strategy","Family","Co-op","Two-player","Classic","Word","Trivia","Collectible"];
 const LANGS = ["English","Telugu"];
@@ -54,7 +65,7 @@ function fromRow(r) {
     pages: r.pages || null, curPage: r.current_page || 0, startedOn: r.started_on || "", finishedOn: r.finished_on || "",
     queued: !!r.queued, queuePos: r.queue_pos ?? null, createdAt: r.created_at || "",
     titleEn: r.title_en || "", creatorEn: r.creator_en || "", coverUrl: r.cover_url || "", series: r.series || "", seriesNo: r.series_no ?? null,
-    pick: !!r.pick, pickNote: r.pick_note || "", dueOn: r.due_on || "", quotes: Array.isArray(r.quotes) ? r.quotes : [], deletedAt: r.deleted_at || "" };
+    pick: !!r.pick, pickNote: r.pick_note || "", dueOn: r.due_on || "", quotes: Array.isArray(r.quotes) ? r.quotes : [], deletedAt: r.deleted_at || "", tags: cleanTags(r.tags) };
 }
 function toRow(i) {
   const book = i.kind === "book";
@@ -69,7 +80,7 @@ function toRow(i) {
     title_en: book ? (i.titleEn || null) : null, creator_en: book ? (i.creatorEn || null) : null, cover_url: book ? (i.coverUrl || null) : null,
     series: book ? (i.series || null) : null, series_no: book && i.series ? (i.seriesNo ?? null) : null,
     pick: !!i.pick, pick_note: i.pick ? (i.pickNote || null) : null, due_on: i.dueOn || null,
-    quotes: book ? (i.quotes || []) : [], deleted_at: i.deletedAt || null };
+    quotes: book ? (i.quotes || []) : [], deleted_at: i.deletedAt || null, tags: cleanTags(i.tags) };
 }
 /* Supabase returns at most 1000 rows per request, so read in pages. */
 async function fetchAll(table, orderCol) {

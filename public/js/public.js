@@ -1,6 +1,6 @@
 /* Friends page: browse only. Reads the public_items view, which never holds private fields. */
 const PREF = (() => { try { return JSON.parse(localStorage.getItem("shelf-prefs") || "{}"); } catch (e) { return {}; } })();
-const P = { items: [], tab: "browse", q: "", kind: "all", lang: "all", cat: "all", stat: "all", letter: "", loc: "", only: "",
+const P = { items: [], tab: "browse", q: "", kind: "all", lang: "all", cat: "all", stat: "all", letter: "", loc: "", only: "", tag: "all",
   sort: "title", view: PREF.view || "list", size: PREF.size || 25, page: 1,
   night: { players: 6, mins: 60, cx: "any", kind: "any" }, ready: false };
 function savePrefs() { try { localStorage.setItem("shelf-prefs", JSON.stringify({ view: P.view, size: P.size })); } catch (e) {} }
@@ -40,10 +40,11 @@ function matches(i, skip) {
   if (skip !== "cat" && P.cat !== "all" && i.cat !== P.cat) return false;
   if (P.loc && String(i.loc || "").toUpperCase() !== P.loc) return false;
   if (P.only && i.id !== P.only) return false;
+  if (skip !== "tag" && P.tag !== "all" && !(i.tags || []).some(t => t.toLowerCase() === P.tag.toLowerCase())) return false;
   if (P.stat === "shelf" && i.status === "lent") return false;
   if (skip !== "letter" && P.letter && (P.sort === "title" || P.sort === "title-desc" || P.sort === "author") && letterOf(sortKeyFor(i)) !== P.letter) return false;
   const toks = queryTokens(); if (!toks.length) return true;
-  if (!i._k) i._k = phon([i.title, i.titleEn, i.creator, i.creatorEn, i.cat, catLabel(i), i.loc, i.series, callNumber(i)].join(" "));
+  if (!i._k) i._k = phon([i.title, i.titleEn, i.creator, i.creatorEn, i.cat, catLabel(i), i.loc, i.series, (i.tags || []).join(" "), callNumber(i)].join(" "));
   return toks.every(t => i._k.includes(t));
 }
 function sorted(list) {
@@ -64,6 +65,7 @@ function chipsFor(i) {
   else { m.push(`<span class="chip">${esc(i.gtype)}</span>`); if (i.pmin) m.push(`<span class="chip">${i.pmin}${i.pmax && i.pmax !== i.pmin ? "–" + i.pmax : ""} players</span>`); if (i.mins) m.push(`<span class="chip">${i.mins} min</span>`); }
   const c = catLabel(i); if (c) m.push(`<span class="chip">${esc(c)}</span>`);
   if (i.series) m.push(`<span class="chip">${esc(i.series)}${i.seriesNo != null ? " #" + esc(i.seriesNo) : ""}</span>`);
+  (i.tags || []).slice(0, 3).forEach(t => m.push(`<span class="chip tag">${esc(t)}</span>`));
   if (i.pick) m.push(`<span class="chip">★ Pick</span>`);
   return m.join("");
 }
@@ -86,6 +88,7 @@ function pbrowse() {
       <input type="search" id="q" placeholder="Search title, author, category or shelf" value="${esc(P.q)}" aria-label="Search">
       <select id="f-kind" aria-label="Type">${o("all","Books and games",P.kind)}${o("book","Books",P.kind)}${o("game","Games",P.kind)}</select>
       <select id="f-lang" aria-label="Language">${o("all","Any language",P.lang)}${LANGS.map(l => o(l, l, P.lang)).join("")}</select>
+      <select id="f-tag" aria-label="Genre" hidden></select>
       <select id="f-stat" aria-label="Availability">${o("all","Everything",P.stat)}${o("shelf","Available now",P.stat)}</select>
       <select id="f-sort" aria-label="Sort by">${SORTS.map(([v, t]) => o(v, "Sort: " + t, P.sort)).join("")}</select>
     </div>
@@ -110,6 +113,12 @@ function pupdate() {
   document.getElementById("catbar").innerHTML =
     `<button class="catbtn" data-cat="all" aria-pressed="${P.cat === "all"}">All<span class="n">${total}</span></button>` +
     cats.map(c => `<button class="catbtn" data-cat="${esc(c)}" aria-pressed="${P.cat === c}">${esc(labelOf(c))}<span class="n">${counts[c] || 0}</span></button>`).join("");
+  // genre dropdown with counts (counts ignore the genre filter itself)
+  const tc = {}; P.items.forEach(i => { if (matches(i, "tag")) (i.tags || []).forEach(t => { const k = t.toLowerCase(); (tc[k] = tc[k] || { t, n: 0 }).n++; }); });
+  const tsel = document.getElementById("f-tag"), tl = Object.values(tc).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t));
+  if (P.tag !== "all" && !tc[P.tag.toLowerCase()]) tl.unshift({ t: P.tag, n: 0 });
+  tsel.hidden = !tl.length;
+  tsel.innerHTML = `<option value="all">Any genre</option>` + tl.map(x => `<option value="${esc(x.t)}"${x.t.toLowerCase() === P.tag.toLowerCase() ? " selected" : ""}>${esc(x.t)} (${x.n})</option>`).join("");
   // A–Z jump bar, only when sorting by title or author
   const az = document.getElementById("az"), byLetter = P.sort === "title" || P.sort === "title-desc" || P.sort === "author";
   if (byLetter) {
@@ -137,6 +146,7 @@ function pupdate() {
   if (P.cat !== "all") act.push(["cat", labelOf(P.cat)]);
   if (P.loc) act.push(["loc", "Shelf " + P.loc]);
   if (P.only) act.push(["only", "One item (from a label)"]);
+  if (P.tag !== "all") act.push(["tag", "Genre: " + P.tag]);
   if (P.letter) act.push(["letter", "Starts with " + (P.letter === "TE" ? "తె" : P.letter)]);
   if (P.q.trim()) act.push(["q", "“" + P.q.trim() + "”"]);
   document.getElementById("active").innerHTML = act.length ? act.map(([k, t]) => `<span class="chip">${esc(t)}<button data-clear="${k}" aria-label="Remove filter ${esc(t)}">×</button></span>`).join("") + `<button class="btn small" data-clear="all">Clear all</button>` : "";
@@ -192,7 +202,7 @@ document.addEventListener("click", e => {
   else if (d.view) { P.view = d.view; savePrefs(); document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === P.view))); pupdate(); }
   else if (d.page) { P.page = +d.page; pupdate(); toResultsTop(); }
   else if (d.clear) {
-    if (d.clear === "all") { P.q = ""; P.kind = "all"; P.lang = "all"; P.stat = "all"; P.cat = "all"; P.letter = ""; P.loc = ""; P.only = ""; if (location.search) history.replaceState(null, "", location.pathname); }
+    if (d.clear === "all") { P.q = ""; P.kind = "all"; P.lang = "all"; P.stat = "all"; P.cat = "all"; P.letter = ""; P.loc = ""; P.only = ""; P.tag = "all"; if (location.search) history.replaceState(null, "", location.pathname); }
     else { P[d.clear] = ["q", "letter", "loc", "only"].includes(d.clear) ? "" : "all"; if ((d.clear === "loc" || d.clear === "only") && location.search) history.replaceState(null, "", location.pathname); }
     resetPage(); prender();
   }
@@ -206,6 +216,7 @@ document.addEventListener("change", e => {
   const id = e.target.id || "", v = e.target.value;
   if (id === "f-kind") { P.kind = v; resetPage(); pupdate(); }
   else if (id === "f-lang") { P.lang = v; resetPage(); pupdate(); }
+  else if (id === "f-tag") { P.tag = v; resetPage(); pupdate(); }
   else if (id === "f-stat") { P.stat = v; resetPage(); pupdate(); }
   else if (id === "f-sort") { P.sort = v; if (!(v === "title" || v === "title-desc" || v === "author")) P.letter = ""; resetPage(); pupdate(); }
   else if (id === "f-size") { P.size = +v; savePrefs(); resetPage(); pupdate(); }

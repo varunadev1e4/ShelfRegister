@@ -229,3 +229,18 @@ create index if not exists wishlist_owner_idx on public.wishlist (owner_id, crea
 alter table public.wishlist enable row level security;
 drop policy if exists "owner full access" on public.wishlist;
 create policy "owner full access" on public.wishlist for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- 8. Genres and tags: many per book or game (the single shelf class stays as it is) ----
+alter table public.items add column if not exists tags text[] not null default '{}';
+drop view if exists public.public_items;
+create view public.public_items with (security_invoker = false) as
+  select id, kind, title, title_en, creator, creator_en, lang, cat, loc, gtype, pmin, pmax, mins, cx,
+         case when status = 'lent' then 'lent' else 'shelf' end as status,
+         cover_url, series, series_no, pick,
+         case when pick then pick_note end as pick_note,
+         tags,
+         created_at
+  from public.items
+  where hidden = false and deleted_at is null;
+revoke all on public.public_items from anon, authenticated;
+grant select on public.public_items to anon, authenticated;

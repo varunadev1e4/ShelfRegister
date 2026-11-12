@@ -119,6 +119,7 @@ Books that are marked read but have no finish date do not count toward any year.
 Friends tap **Request** on a card, enter a name and a WhatsApp number or email, and it lands in your **Requests** tab (with a number on the tab and a banner). From there you can reply on WhatsApp or email, tap **Lend to** to open the lend form with their name filled in, mark it handled, or decline.
 
 Because anyone with the link can send a request, the database defends itself:
+
 - A request must be for an item that exists and is not hidden or deleted. The title is taken from your catalog, so it cannot be faked.
 - At most 30 requests an hour overall, 5 a day per contact, and the same person cannot ask for the same item twice in a day.
 - Names, contacts and messages have length limits. Friends can only add a request; they cannot read, change or delete any.
@@ -145,6 +146,10 @@ This is protection against casual abuse, not a CAPTCHA. If you want requests to 
 ### Things you borrow from others (Borrowed tab)
 
 Tap **I borrowed something**, then enter the title, who lent it, and a return date (30 days by default). The tab lists what you owe by person, flags overdue items, and shows a banner. **Returned** moves it to a history list (with Undo), **+7 days** pushes the date, and **Message** opens WhatsApp with a short note to the lender. Add their phone number once, or add them under Friends, so the message opens their chat. This is private to you. It needs the new part of `schema.sql` (section 6).
+
+### Genres and tags
+
+Each book keeps one **shelf class** (it sets the call number and shelf). On top of that, give it as many **genres and tags** as fit, such as Mythology, Political or Mystery. In the add/edit form, tap the chips, search the list, or type your own and press Enter. A starter list of about 50 book genres and 20 game tags is built in, and anything you have used before comes first. Friends get a **Any genre** dropdown with counts, and can also find a genre by typing it in the search box. Your Insights and Buy next suggestions learn from the genres of books you rate highly. In CSV files, put tags in a `tags` column separated by semicolons (for example `Mythology; Fantasy`). Existing items start with no tags. Needs the new part of `schema.sql` (section 8), which also updates the friends view.
 
 ### Buy next tab (books to add to your library)
 
@@ -204,14 +209,14 @@ Use **Data** > **Download CSV** now and then. The CSV includes pages and start a
 
 ## If something goes wrong
 
-| Problem | Fix |
-|---|---|
-| Page says "Not connected yet" | `config.js` still has the placeholders. Edit, save, redeploy. |
-| "That email and password did not match" | Recheck the user you created in Authentication > Users, and that Auto Confirm was ticked. |
-| Friends page is empty | Items may all be hidden, or `schema.sql` was not run completely. Run it again; it is safe to repeat. |
-| Admin loads but nothing saves | Run `schema.sql` again, and confirm you are signed in on `/admin`. |
-| A banner says "Update the database" | Run the newest `supabase/schema.sql` in the Supabase SQL Editor, then reload. |
-| Friends see "Could not send the request" | Run the newest `schema.sql` (it creates the request table and rules). The message under the form says if a limit was hit. |
-| Covers do not show | The book needs an ISBN, and Open Library must have a cover for it. Many Telugu books will not have one. |
-| Printed QR opens the wrong site | Set `PUBLIC_URL` in `config.js` to your real address and reprint. |
-| Supabase warns about a "security definer view" | That is intended. The `public_items` view is how friends get a safe, read-only list. |
+| Problem                                        | Fix                                                                                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Page says "Not connected yet"                  | `config.js` still has the placeholders. Edit, save, redeploy.                                                             |
+| "That email and password did not match"        | Recheck the user you created in Authentication > Users, and that Auto Confirm was ticked.                                 |
+| Friends page is empty                          | Items may all be hidden, or `schema.sql` was not run completely. Run it again; it is safe to repeat.                      |
+| Admin loads but nothing saves                  | Run `schema.sql` again, and confirm you are signed in on `/admin`.                                                        |
+| A banner says "Update the database"            | Run the newest `supabase/schema.sql` in the Supabase SQL Editor, then reload.                                             |
+| Friends see "Could not send the request"       | Run the newest `schema.sql` (it creates the request table and rules). The message under the form says if a limit was hit. |
+| Covers do not show                             | The book needs an ISBN, and Open Library must have a cover for it. Many Telugu books will not have one.                   |
+| Printed QR opens the wrong site                | Set `PUBLIC_URL` in `config.js` to your real address and reprint.                                                         |
+| Supabase warns about a "security definer view" | That is intended. The `public_items` view is how friends get a safe, read-only list.                                      |

@@ -45,6 +45,13 @@ async function buildSuggestions(onStep) {
     let n = 0; for (const d of docs) { if (n >= 4) break; const au = (d.author_name || [""])[0]; if (!owned(d.title, au) && add({ title: d.title, author: au, year: d.first_publish_year, cover: coverOf(d), why: `Well rated in ${catName(c)} (${(+d.ratings_average).toFixed(1)} from ${d.ratings_count} readers)`, kind: "shelf" })) n++; }
     await new Promise(r => setTimeout(r, 300));
   }
+  // 4. well-rated books in your favourite genres (your own tags, searched as subjects)
+  for (const g of t.favTags.filter(x => /^[a-z][a-z \-&']{2,30}$/i.test(x)).slice(0, 3)) {
+    onStep("Looking up popular " + g.toLowerCase() + "…");
+    const docs = (await olSearch("subject=" + encodeURIComponent(g.toLowerCase()) + "&language=eng&sort=rating&limit=40")).filter(d => (d.ratings_count || 0) >= 100 && (d.ratings_average || 0) >= 4);
+    let n = 0; for (const d of docs) { if (n >= 4) break; const au = (d.author_name || [""])[0]; if (!owned(d.title, au) && add({ title: d.title, author: au, year: d.first_publish_year, cover: coverOf(d), why: `You enjoy ${g} (${(+d.ratings_average).toFixed(1)} from ${d.ratings_count} readers)`, kind: "genre" })) n++; }
+    await new Promise(r => setTimeout(r, 300));
+  }
   return out;
 }
 async function findSuggestions(force) {

@@ -6,11 +6,12 @@ function filtered() {
     if (S.lang !== "all" && (i.kind !== "book" || i.lang !== S.lang)) return false;
     if (S.cat !== "all" && i.cat !== S.cat) return false;
     if (S.loc !== "all" && (i.loc || "") !== S.loc) return false;
+    if (S.tag !== "all" && !(i.tags || []).some(t => t.toLowerCase() === S.tag.toLowerCase())) return false;
     if (S.stat === "lent" && i.status !== "lent") return false;
     if (S.stat === "shelf" && i.status === "lent") return false;
     if (S.stat === "unread" && !(i.kind === "book" && (i.read || "unread") === "unread")) return false;
     if (!q) return true;
-    return norm([i.title, i.creator, i.isbn, i.loc, i.notes, i.cat, i.lentTo, callNumber(i)].join(" ")).includes(q);
+    return norm([i.title, i.creator, i.isbn, i.loc, i.notes, i.cat, (i.tags || []).join(" "), i.lentTo, callNumber(i)].join(" ")).includes(q);
   }).sort((a, b) => norm(callNumber(a) + a.title).localeCompare(norm(callNumber(b) + b.title)));
 }
 function cardHTML(i) {
@@ -20,6 +21,7 @@ function cardHTML(i) {
   if (i.kind === "book") { meta.push(`<span class="chip">${esc(i.lang)}</span>`); if (i.read === "read") meta.push(`<span class="chip">Read${i.rating ? " · " + "★".repeat(i.rating) : ""}</span>`); if (i.read === "reading") meta.push(`<span class="chip">Reading</span>`); }
   else { meta.push(`<span class="chip">${esc(i.gtype)}</span>`); if (i.pmin) meta.push(`<span class="chip">${i.pmin}${i.pmax && i.pmax !== i.pmin ? "–" + i.pmax : ""} players</span>`); if (i.mins) meta.push(`<span class="chip">${i.mins} min</span>`); }
   const c = catLabel(i); if (c) meta.push(`<span class="chip">${esc(c)}</span>`);
+  (i.tags || []).forEach(t => meta.push(`<span class="chip tag">${esc(t)}</span>`));
   if (i.hidden) meta.push(`<span class="chip sample">Hidden from friends</span>`);
   if (i.kind === "book" && i.queued && i.read !== "read") meta.push(`<span class="chip">On reading list</span>`);
   return `<article class="card">
@@ -46,11 +48,14 @@ function renderCatalog() {
   const locs = [...new Set(items.map(i => i.loc).filter(Boolean))].sort();
   const cats = [...new Set(items.map(i => i.cat).filter(Boolean))];
   const opt = (v, t, cur) => `<option value="${esc(v)}"${cur === v ? " selected" : ""}>${esc(t)}</option>`;
+  const tagCount = {}; items.forEach(i => (i.tags || []).forEach(t => { const k = t.toLowerCase(); tagCount[k] = tagCount[k] || { n: 0, t }; tagCount[k].n++; }));
+  const tagList = Object.values(tagCount).sort((x, y) => x.t.localeCompare(y.t));
   return `<div class="bar">
       <input type="search" id="q" placeholder="Search title, author, shelf, friend, call number" value="${esc(S.q)}" aria-label="Search the catalog">
       <select id="f-kind" aria-label="Type">${opt("all","Books and games",S.kind)}${opt("book","Books only",S.kind)}${opt("game","Games only",S.kind)}</select>
       <select id="f-lang" aria-label="Language">${opt("all","Any language",S.lang)}${LANGS.map(l => opt(l, l, S.lang)).join("")}</select>
       <select id="f-cat" aria-label="Category">${opt("all","Any category",S.cat)}${cats.map(c => opt(c, (BOOK_CLASSES.find(b => b[0] === c) || [c, c])[1], S.cat)).join("")}</select>
+      ${tagList.length ? `<select id="f-tag" aria-label="Genre or tag">${opt("all","Any genre",S.tag)}${tagList.map(x => opt(x.t, x.t + " (" + x.n + ")", S.tag)).join("")}</select>` : ""}
       <select id="f-loc" aria-label="Shelf">${opt("all","Any shelf",S.loc)}${locs.map(l => opt(l, l, S.loc)).join("")}</select>
       <select id="f-stat" aria-label="Status">${opt("all","Any status",S.stat)}${opt("shelf","On the shelf",S.stat)}${opt("lent","Lent out",S.stat)}${opt("unread","Unread books",S.stat)}</select>
       ${S.canWrite ? `<button class="btn primary" data-act="add">Add item</button>` : ""}
@@ -114,6 +119,9 @@ function openForm(id, pre) {
         <label>Weight<select id="i-cx">${sel(["Light","Medium","Heavy"], v.cx || "Medium")}</select></label>
       </div>
     </div>
+    <div id="tagbox" style="margin-bottom:10px"><span class="note" style="display:block;margin-bottom:4px">Genres and tags (pick as many as fit, or type your own)</span>
+      <div class="pickchips" id="tag-chips"></div>
+      <input type="text" id="tag-in" placeholder="Search genres, or type a new one and press Enter" autocomplete="off" maxlength="40" style="margin-top:6px"></div>
     <label>Notes (private, friends never see these)<textarea id="i-notes" rows="2">${esc(v.notes)}</textarea></label>
     <label style="flex-direction:row;align-items:center;gap:8px;margin-top:10px;color:var(--fg)"><input type="checkbox" id="i-hidden" style="width:auto"${v.hidden ? " checked" : ""}> Hide this item from the friends page</label>
     <label style="flex-direction:row;align-items:center;gap:8px;margin-top:8px;color:var(--fg)"><input type="checkbox" id="i-pick" style="width:auto"${v.pick ? " checked" : ""}> Recommend this on the friends page (Picks)</label>
@@ -123,6 +131,35 @@ function openForm(id, pre) {
       <button type="button" class="btn" data-act="close">Cancel</button>
       <button type="submit" class="btn primary" id="add-btn">${it ? "Save changes" : "Add to catalog"}</button>
     </div></form></div>`;
+  /* Genres and tags picker */
+  const tagSel = cleanTags(v.tags || []); let tagMore = false;
+  const tagPool = () => {                                         // your used tags first (most used), then the starter list for this kind
+    const kindNow = document.getElementById("i-kind").value === "game" ? "game" : "book", cnt = {}, shown = new Map();
+    allItems().forEach(i => (i.tags || []).forEach(t => { cnt[t.toLowerCase()] = (cnt[t.toLowerCase()] || 0) + 1; if (!shown.has(t.toLowerCase())) shown.set(t.toLowerCase(), t); }));
+    const used = [...shown.entries()].sort((x, y) => cnt[y[0]] - cnt[x[0]]).map(x => x[1]);
+    const base = (kindNow === "game" ? GAME_TAGS : BOOK_TAGS).filter(t => !shown.has(t.toLowerCase()));
+    return [...used, ...base];
+  };
+  const hasTag = t => tagSel.some(x => x.toLowerCase() === t.toLowerCase());
+  const drawTags = () => {
+    const term = document.getElementById("tag-in").value.trim().toLowerCase(), pool = tagPool().filter(t => !hasTag(t));
+    let list = term ? pool.filter(t => t.toLowerCase().includes(term)) : (tagMore ? pool : pool.slice(0, 16));
+    const exact = term && [...tagSel, ...pool].some(t => t.toLowerCase() === term);
+    document.getElementById("tag-chips").innerHTML = tagSel.map(t => `<button type="button" class="catbtn" aria-pressed="true" data-tag="${esc(t)}">${esc(t)} ×</button>`).join("") +
+      list.slice(0, 40).map(t => `<button type="button" class="catbtn" aria-pressed="false" data-tag="${esc(t)}">${esc(t)}</button>`).join("") +
+      (term && !exact ? `<button type="button" class="catbtn" aria-pressed="false" data-tag-new="1">+ Add “${esc(document.getElementById("tag-in").value.trim())}”</button>` : "") +
+      (!term && !tagMore && pool.length > 16 ? `<button type="button" class="catbtn" data-tag-more="1">More…</button>` : "");
+  };
+  const toggleTag = t => { const i = tagSel.findIndex(x => x.toLowerCase() === t.toLowerCase()); if (i >= 0) tagSel.splice(i, 1); else if (tagSel.length < 12) tagSel.push(t); else toast("Up to 12 tags per item."); };
+  document.getElementById("tag-chips").onclick = e => { const b = e.target.closest("button"); if (!b) return; const inp = document.getElementById("tag-in");
+    if (b.dataset.tagMore) tagMore = true; else if (b.dataset.tagNew) { toggleTag(inp.value.trim()); inp.value = ""; } else if (b.dataset.tag) { toggleTag(b.dataset.tag); } drawTags(); };
+  document.getElementById("tag-in").oninput = drawTags;
+  document.getElementById("tag-in").onkeydown = e => { if (e.key !== "Enter") return; e.preventDefault(); const inp = e.target, t = inp.value.trim(); if (!t) return;
+    const pool = tagPool(), low = t.toLowerCase(), part = pool.filter(x => !hasTag(x) && x.toLowerCase().includes(low));
+    const hit = pool.concat(tagSel).find(x => x.toLowerCase() === low) || (part.length === 1 ? part[0] : null);   // exact match, or the only suggestion left
+    if (!hasTag(hit || t)) toggleTag(hit || t); inp.value = ""; drawTags(); };
+  document.getElementById("i-kind").addEventListener("change", drawTags);
+  drawTags();
   const rd = document.getElementById("i-read");
   rd.onchange = () => {
     const st = document.getElementById("i-started"), fi = document.getElementById("i-finished");
@@ -134,7 +171,7 @@ function openForm(id, pre) {
   const g = x => document.getElementById(x).value;
   const collect = () => {
     const k = it ? it.kind : g("i-kind");
-    const base = { ...(it || {}), id: it ? it.id : uid(), kind: k, title: g("i-title").trim(), loc: g("i-loc").trim().toUpperCase(), notes: g("i-notes").trim(), status: it ? it.status : "shelf", hidden: document.getElementById("i-hidden").checked,
+    const base = { ...(it || {}), id: it ? it.id : uid(), kind: k, title: g("i-title").trim(), loc: g("i-loc").trim().toUpperCase(), notes: g("i-notes").trim(), status: it ? it.status : "shelf", hidden: document.getElementById("i-hidden").checked, tags: cleanTags(tagSel),
       pick: document.getElementById("i-pick").checked, pickNote: g("i-picknote").trim() };
     if (k === "book") {
       Object.assign(base, { creator: g("i-creator").trim(), lang: g("i-lang"), cat: g("i-bcat"), isbn: g("i-isbn").trim(), read: g("i-read"), rating: +g("i-rating"), pages: +g("i-pages") || null, startedOn: g("i-started"), finishedOn: g("i-finished"), queued: g("i-read") === "unread" && !!(it && it.queued),
@@ -237,8 +274,8 @@ function parseCSV(text) {
   return rows.filter(r => r.some(x => x.trim()));
 }
 const csvCell = v => { const s = String(v ?? ""); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-const COLS = ["kind","title","creator","lang","cat","loc","isbn","read","rating","gtype","pmin","pmax","mins","cx","status","lentTo","lentOn","dueOn","notes","pages","startedOn","finishedOn","queued","titleEn","creatorEn","series","seriesNo","coverUrl","pick","pickNote"];
-function toCSV() { return [COLS.join(","), ...allItems().map(i => COLS.map(c => csvCell(i[c])).join(","))].join("\n"); }
+const COLS = ["kind","title","creator","lang","cat","loc","isbn","read","rating","gtype","pmin","pmax","mins","cx","status","lentTo","lentOn","dueOn","notes","pages","startedOn","finishedOn","queued","titleEn","creatorEn","series","seriesNo","coverUrl","pick","pickNote","tags"];
+function toCSV() { return [COLS.join(","), ...allItems().map(i => COLS.map(c => csvCell(c === "tags" ? (i.tags || []).join("; ") : i[c])).join(","))].join("\n"); }
 function guessClass(raw) {
   const s = norm(raw).trim(); if (!s) return "FIC";
   const hit = BOOK_CLASSES.find(c => norm(c[0]) === s || norm(c[1]).startsWith(s));
@@ -254,7 +291,7 @@ function importCSV(text) {
   const head = rows[0].map(h => norm(h).trim());
   const col = (...names) => head.findIndex(h => names.includes(h));
   const ix = { pages: col("pages","page count","number of pages"), started: col("started_on","startedon","started","date started"), finished: col("finished_on","finishedon","finished","date read","read date"), queued: col("queued"), series: col("series"), series_no: col("series_no","series number","number in series"), title_en: col("title_en","titleen","english title"),
-    title: col("title","name"), creator: col("author","creator","creators","authors"), lang: col("language","lang"), cat: col("cat","category","class","genre","subject","tags"),
+    title: col("title","name"), creator: col("author","creator","creators","authors"), lang: col("language","lang"), cat: col("cat","category","class","subject"), tags: col("tags","genres","genre"),
     loc: col("shelf","location","loc"), isbn: col("isbn","ean_isbn13","isbn13"), notes: col("notes","description"), kind: col("kind","type"), gtype: col("gtype"),
     pmin: col("pmin","min players"), pmax: col("pmax","max players"), mins: col("mins","minutes"), read: col("read","reading","exclusive shelf") };
   if (ix.title < 0) return toast("No title column found. The first row must name its columns, for example title, author.");
@@ -262,7 +299,7 @@ function importCSV(text) {
   const list = rows.slice(1).map(r => {
     const title = get(r, "title"); if (!title) return null;
     const kind = /game/i.test(get(r, "kind")) ? "game" : "book";
-    const base = { id: uid(), kind, title, loc: get(r, "loc").toUpperCase(), notes: get(r, "notes"), status: "shelf" };
+    const base = { id: uid(), kind, tags: cleanTags(get(r, "tags")), title, loc: get(r, "loc").toUpperCase(), notes: get(r, "notes"), status: "shelf" };
     if (kind === "game") return Object.assign(base, { gtype: /card/i.test(get(r, "kind") + get(r, "gtype")) ? "Card game" : "Board game", cat: GAME_CATS.find(c => norm(c) === norm(get(r, "cat"))) || "Party", pmin: +get(r, "pmin") || 2, pmax: +get(r, "pmax") || 4, mins: +get(r, "mins") || 45, cx: "Medium" });
     const lang = /tel/i.test(get(r, "lang")) || hasTelugu(title) ? "Telugu" : "English";
     return Object.assign(base, { creator: get(r, "creator"), lang, cat: guessClass(get(r, "cat")), isbn: cleanIsbn(get(r, "isbn")), coverUrl: "", titleEn: hasTelugu(title) ? (get(r, "title_en") || teluguToRoman(title)) : "", creatorEn: hasTelugu(get(r, "creator")) ? teluguToRoman(get(r, "creator")) : "", series: get(r, "series"), seriesNo: get(r, "series") && get(r, "series_no") !== "" ? +get(r, "series_no") : null, read: dateOnly(get(r, "finished")) ? "read" : readVal(get(r, "read")), rating: 0, pages: +get(r, "pages") || null, startedOn: dateOnly(get(r, "started")), finishedOn: dateOnly(get(r, "finished")), queued: norm(get(r, "read")) === "to-read" || norm(get(r, "queued")) === "true" });
@@ -274,7 +311,7 @@ function importCSV(text) {
 /* ---------- State ---------- */
 const S = {
   items: [], trash: [], requests: [], friends: [], loans: [], settings: {}, tab: "catalog",
-  q: "", kind: "all", lang: "all", cat: "all", loc: "all", stat: "all",
+  q: "", kind: "all", lang: "all", cat: "all", tag: "all", loc: "all", stat: "all",
   night: { players: 6, mins: 60, cx: "any", kind: "any" },
   ready: false, canWrite: true, session: null
 };
@@ -395,7 +432,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const id = e.target.id || "";
-  const map = { "f-kind": "kind", "f-lang": "lang", "f-cat": "cat", "f-loc": "loc", "f-stat": "stat" };
+  const map = { "f-kind": "kind", "f-lang": "lang", "f-cat": "cat", "f-tag": "tag", "f-loc": "loc", "f-stat": "stat" };
   if (map[id]) { S[map[id]] = e.target.value; updateResults(); }
   else if (id === "csvfile" && e.target.files[0]) {
     const r = new FileReader();
