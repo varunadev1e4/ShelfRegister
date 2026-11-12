@@ -146,6 +146,10 @@ This is protection against casual abuse, not a CAPTCHA. If you want requests to 
 
 Tap **I borrowed something**, then enter the title, who lent it, and a return date (30 days by default). The tab lists what you owe by person, flags overdue items, and shows a banner. **Returned** moves it to a history list (with Undo), **+7 days** pushes the date, and **Message** opens WhatsApp with a short note to the lender. Add their phone number once, or add them under Friends, so the message opens their chat. This is private to you. It needs the new part of `schema.sql` (section 6).
 
+### Insights tab (what to read next)
+
+Analyses your whole library and suggests books. It learns your taste from books marked as read (ratings count, so 5-star books pull harder), then ranks your unread books using: the next book in a series you started, your reading list, authors you rated highly, shelves you enjoy, your usual length, whether you are behind your yearly goal, and how long a book has waited. Each pick says why. It also shows quick reads to catch up on your goal, shelves you own but have not touched, the books waiting longest, a breakdown of your books by shelf class, and a games summary that shows which group sizes have too few games. It needs at least 3 finished books to judge taste. Everything is worked out in your browser from your own data, so nothing is sent anywhere.
+
 ### Book covers
 
 Data tab → **Find book covers** checks each book on Open Library and Google Books (by ISBN, then by title and author) and saves a link only if the picture really loads. It replaces old covers that no longer work, and skips books it already tried in the last 30 days. Keep the tab open while it runs. New books and imports look for a cover automatically. In the add/edit form, **Find cover** does it for one book. Many Telugu and local books have no cover online, and those show none.

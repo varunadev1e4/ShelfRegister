@@ -365,7 +365,7 @@ async function signIn(e) {
 function exportCSV() { downloadText("shelf-register-" + today() + ".csv", toCSV(), "text/csv"); markBackup(); toast("CSV downloaded"); }
 
 /* ---------- Render + events ---------- */
-const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["night","Game night"],["lent","Lent out"],["borrowed","Borrowed"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
+const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["insights","Insights"],["night","Game night"],["lent","Lent out"],["borrowed","Borrowed"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
 function tabBadge(k) {
   let n = 0, cls = "n";
   if (k === "catalog") n = S.items.length;
@@ -376,7 +376,7 @@ function tabBadge(k) {
 }
 function renderTab() {
   switch (S.tab) {
-    case "catalog": return renderCatalog(); case "reading": return renderReading(); case "series": return renderSeries();
+    case "catalog": return renderCatalog(); case "reading": return renderReading(); case "series": return renderSeries(); case "insights": return renderInsights();
     case "night": return renderNight(); case "lent": return renderLent(); case "borrowed": return renderBorrowed(); case "friends": return renderFriends();
     case "requests": return renderRequests(); case "shelves": return renderShelves(); case "labels": return renderLabels();
     case "guide": return renderGuide(); default: return renderData();
