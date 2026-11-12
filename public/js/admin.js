@@ -368,6 +368,8 @@ function exportCSV() { downloadText("shelf-register-" + today() + ".csv", toCSV(
 
 /* ---------- Render + events ---------- */
 const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["insights","Insights"],["buy","Buy next"],["night","Game night"],["lent","Lent out"],["borrowed","Borrowed"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
+const TABNAME = Object.fromEntries(TABS);
+const NAV = [["Library", ["catalog", "shelves", "labels"]], ["Reading", ["reading", "series", "insights", "buy"]], ["Lending", ["lent", "borrowed", "friends", "requests"]], ["Play", ["night"]], ["More", ["data", "guide"]]];
 function tabBadge(k) {
   let n = 0, cls = "n";
   if (k === "catalog") n = S.items.length;
@@ -387,9 +389,13 @@ function renderTab() {
 }
 function render() {
   const view = document.getElementById("view"), tabs = document.getElementById("tabs");
-  if (!S.session) { tabs.innerHTML = ""; view.innerHTML = renderLogin(); document.getElementById("loginform").onsubmit = signIn; setStatus(""); return; }
+  if (!S.session) { document.body.classList.add("signed-out"); document.getElementById("pagetitle").textContent = ""; tabs.innerHTML = ""; view.innerHTML = renderLogin(); document.getElementById("loginform").onsubmit = signIn; setStatus(""); return; }
   const items = allItems(), lentN = items.filter(i => i.status === "lent").length;
-  tabs.innerHTML = TABS.map(([k, t]) => `<button class="tab" role="tab" aria-selected="${S.tab === k}" data-act="tab" data-tab="${k}">${t}${tabBadge(k)}</button>`).join("");
+  const navScroll = tabs.scrollTop, navLeft = tabs.scrollLeft;
+  tabs.innerHTML = NAV.map(([group, keys]) => `<div class="grp" role="presentation"><span class="grp-t">${group}</span>${keys.map(k => `<button class="tab" role="tab" aria-selected="${S.tab === k}" data-act="tab" data-tab="${k}">${TABNAME[k]}${tabBadge(k)}</button>`).join("")}</div>`).join("");
+  tabs.scrollTop = navScroll; tabs.scrollLeft = navLeft;
+  const cur = tabs.querySelector('[aria-selected="true"]'); if (cur && tabs.scrollWidth > tabs.clientWidth + 2 && !tabs.dataset.placed) { tabs.dataset.placed = "1"; cur.scrollIntoView({ inline: "center", block: "nearest" }); }
+  document.body.classList.remove("signed-out"); document.getElementById("pagetitle").textContent = TABNAME[S.tab] || "";
   const had = document.activeElement && document.activeElement.id;
   view.innerHTML = !S.ready ? `<div class="empty">Loading your catalog…</div>` : renderBanners() + renderTab();
   if (S.tab === "catalog" && S.ready) updateResults();
