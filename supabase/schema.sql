@@ -213,3 +213,19 @@ create index if not exists borrowed_owner_idx on public.borrowed (owner_id, borr
 alter table public.borrowed enable row level security;
 drop policy if exists "owner full access" on public.borrowed;
 create policy "owner full access" on public.borrowed for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- 7. Wishlist: books you want to buy, and suggestions you dismissed (private to you) ----
+create table if not exists public.wishlist (
+  id         uuid primary key default gen_random_uuid(),
+  owner_id   uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title      text not null,
+  author     text,
+  note       text,
+  cover_url  text,
+  status     text not null default 'want' check (status in ('want','skip')),
+  created_at timestamptz not null default now()
+);
+create index if not exists wishlist_owner_idx on public.wishlist (owner_id, created_at);
+alter table public.wishlist enable row level security;
+drop policy if exists "owner full access" on public.wishlist;
+create policy "owner full access" on public.wishlist for all to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());

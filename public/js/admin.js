@@ -66,10 +66,11 @@ function updateResults() {
 }
 
 /* ---------- Add / edit sheet ---------- */
-function openForm(id) {
+function openForm(id, pre) {
   const it = id ? allItems().find(i => i.id === id) : null;
   const kind = it ? it.kind : (S.kind === "game" ? "game" : "book");
   const v = it || { kind, title: "", creator: "", lang: "English", cat: kind === "book" ? "FIC" : "Party", loc: "", isbn: "", read: "unread", rating: 0, notes: "", gtype: "Board game", pmin: 2, pmax: 4, mins: 45, cx: "Medium" };
+  if (!it && pre) Object.assign(v, pre);
   const locs = [...new Set(allItems().map(i => i.loc).filter(Boolean))].sort();
   const isBook = v.kind === "book";
   const sel = (arr, cur) => arr.map(a => { const [val, txt] = Array.isArray(a) ? a : [a, a]; return `<option value="${esc(val)}"${cur === val ? " selected" : ""}>${esc(txt)}</option>`; }).join("");
@@ -173,6 +174,7 @@ function openForm(id) {
     const base = collect(); if (!base.title) return;
     if (!it && !dupOk && showDupes(base)) { dupOk = true; document.getElementById("add-btn").textContent = "Add anyway"; return; }
     saveItem(base); closeModal(); toast(it ? "Saved" : "Added to the catalog");
+    if (!it && base.kind === "book" && typeof wishBought === "function") wishBought(base);
     if (base.kind === "book" && !base.coverUrl && typeof autoCovers === "function") setTimeout(() => autoCovers([base.id]), 800);
   };
   document.getElementById("i-title").focus();
@@ -365,18 +367,19 @@ async function signIn(e) {
 function exportCSV() { downloadText("shelf-register-" + today() + ".csv", toCSV(), "text/csv"); markBackup(); toast("CSV downloaded"); }
 
 /* ---------- Render + events ---------- */
-const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["insights","Insights"],["night","Game night"],["lent","Lent out"],["borrowed","Borrowed"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
+const TABS = [["catalog","Catalog"],["reading","Reading"],["series","Series"],["insights","Insights"],["buy","Buy next"],["night","Game night"],["lent","Lent out"],["borrowed","Borrowed"],["friends","Friends"],["requests","Requests"],["shelves","Shelves"],["labels","Labels"],["guide","How it works"],["data","Data"]];
 function tabBadge(k) {
   let n = 0, cls = "n";
   if (k === "catalog") n = S.items.length;
   else if (k === "lent") n = S.items.filter(i => i.status === "lent").length;
+  else if (k === "buy") n = S.wish.filter(w => w.status === "want").length;
   else if (k === "borrowed") n = S.borrowed.filter(b => !b.returned_on).length;
   else if (k === "requests") n = S.requests.filter(r => r.status === "new").length;
   return n ? `<span class="${cls}">${n}</span>` : "";
 }
 function renderTab() {
   switch (S.tab) {
-    case "catalog": return renderCatalog(); case "reading": return renderReading(); case "series": return renderSeries(); case "insights": return renderInsights();
+    case "catalog": return renderCatalog(); case "reading": return renderReading(); case "series": return renderSeries(); case "insights": return renderInsights(); case "buy": return renderBuyNext();
     case "night": return renderNight(); case "lent": return renderLent(); case "borrowed": return renderBorrowed(); case "friends": return renderFriends();
     case "requests": return renderRequests(); case "shelves": return renderShelves(); case "labels": return renderLabels();
     case "guide": return renderGuide(); default: return renderData();

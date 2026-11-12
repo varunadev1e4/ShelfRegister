@@ -146,7 +146,11 @@ This is protection against casual abuse, not a CAPTCHA. If you want requests to 
 
 Tap **I borrowed something**, then enter the title, who lent it, and a return date (30 days by default). The tab lists what you owe by person, flags overdue items, and shows a banner. **Returned** moves it to a history list (with Undo), **+7 days** pushes the date, and **Message** opens WhatsApp with a short note to the lender. Add their phone number once, or add them under Friends, so the message opens their chat. This is private to you. It needs the new part of `schema.sql` (section 6).
 
-### Insights tab (what to read next)
+### Buy next tab (books to add to your library)
+
+A wishlist plus suggestions for books you do not own yet. Press **Find suggestions** and it looks up, on Open Library's public catalogue, more books by authors you rated highly and well-rated books (4 stars or more, 100+ readers) in the shelves you enjoy. It also lists missing volumes of series you own. Books you already own are left out. For each suggestion: **Add to wishlist**, **Amazon.in** and **Flipkart** search links, or **Not interested** (it will not show again). **Bought it** opens the add form already filled in, and the book leaves the wishlist when you save it. Only an author name or a subject word is sent to Open Library, never your library. English books only, since Open Library knows few Telugu titles. Results are kept for 7 days on this device. Needs the new part of `schema.sql` (section 7). It also points out group sizes where you have few games.
+
+### Insights tab (what to read next from books you own)
 
 Analyses your whole library and suggests books. It learns your taste from books marked as read (ratings count, so 5-star books pull harder), then ranks your unread books using: the next book in a series you started, your reading list, authors you rated highly, shelves you enjoy, your usual length, whether you are behind your yearly goal, and how long a book has waited. Each pick says why. It also shows quick reads to catch up on your goal, shelves you own but have not touched, the books waiting longest, a breakdown of your books by shelf class, and a games summary that shows which group sizes have too few games. It needs at least 3 finished books to judge taste. Everything is worked out in your browser from your own data, so nothing is sent anywhere.
 

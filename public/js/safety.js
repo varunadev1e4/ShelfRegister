@@ -3,7 +3,7 @@
 
 async function loadMore() {
   S.needSchema = false;
-  await Promise.all([loadSettings(), typeof loadLending === "function" ? loadLending() : 0, typeof loadRequests === "function" ? loadRequests() : 0, typeof loadBorrowed === "function" ? loadBorrowed() : 0]);
+  await Promise.all([loadSettings(), typeof loadLending === "function" ? loadLending() : 0, typeof loadRequests === "function" ? loadRequests() : 0, typeof loadBorrowed === "function" ? loadBorrowed() : 0, typeof loadWishlist === "function" ? loadWishlist() : 0]);
 }
 async function loadSettings() {
   try { const { data, error } = await sb.from("settings").select("*").limit(1); if (error) throw error; S.settings = data && data[0] ? data[0] : {}; }
@@ -77,7 +77,7 @@ function importWithDupCheck(list) {
 function backupObject() {
   return { app: "shelf-register", version: 2, exportedAt: new Date().toISOString(),
     items: [...S.items, ...S.trash].map(toRow),
-    borrowed: (S.borrowed || []).map(({ owner_id, ...r }) => r), friends: S.friends.map(({ owner_id, ...r }) => r), loans: S.loans.map(({ owner_id, ...r }) => r),
+    borrowed: (S.borrowed || []).map(({ owner_id, ...r }) => r), wishlist: (S.wish || []).map(({ owner_id, ...r }) => r), friends: S.friends.map(({ owner_id, ...r }) => r), loans: S.loans.map(({ owner_id, ...r }) => r),
     reading_goals: S.goals.map(g => ({ year: g.year, target: g.target })),
     reading_log: S.log.filter(l => l.id !== "tmp").map(l => ({ id: l.id, item_id: l.itemId, log_date: l.date, pages: l.pages })) };
 }
@@ -107,6 +107,7 @@ async function restoreGo() {
     await up("friends", b.friends || []);
     await up("loans", b.loans || []);
     await up("borrowed", b.borrowed || []);
+    await up("wishlist", b.wishlist || []);
     await up("reading_goals", (b.reading_goals || []).map(g => ({ ...g, owner_id: S.session.user.id })), { onConflict: "owner_id,year" });
     await up("reading_log", b.reading_log || []);
     await loadItems(); toast("Backup restored");
